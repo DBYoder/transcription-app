@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose draws the UI; this only sets the window colours shown while the app starts. -->
+    <style name="Theme.Transcribe" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <color name="ic_launcher_background">#1E3A5F</color>
+</resources>
