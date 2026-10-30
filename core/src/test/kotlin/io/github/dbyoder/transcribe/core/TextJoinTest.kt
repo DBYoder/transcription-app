@@ -49,6 +49,52 @@ class TextJoinTest {
     }
 
     @Test
+    fun lowercasesEverydayFirstWordMidSentence() {
+        assertEquals("maybe we should go.", join("Maybe we should go.", before = "I think "))
+        assertEquals(" how are you?", join("How are you?", before = "Hello,"))
+        assertEquals(" the plan", join("The plan.", before = "Here's", after = ", right?"))
+    }
+
+    @Test
+    fun keepsNamesAcronymsAndIMidSentence() {
+        assertEquals("John said hi.", join("John said hi.", before = "and "))
+        assertEquals("NASA called.", join("NASA called.", before = "then "))
+        assertEquals("I think so.", join("I think so.", before = "well "))
+        assertEquals("I'm in.", join("I'm in.", before = "okay "))
+        assertEquals("iPhone works.", join("iPhone works.", before = "my "))
+    }
+
+    @Test
+    fun capitalizesAfterASentenceOrLineEnds() {
+        assertEquals("We left.", join("we left.", before = "It rained. "))
+        assertEquals("So we left.", join("So we left.", before = "It rained. "))
+        assertEquals("Next.", join("next.", before = "Done!\n"))
+    }
+
+    @Test
+    fun emptyBoxKeepsTheModelsCasing() {
+        assertEquals("maybe later.", join("maybe later."))
+        assertEquals("Maybe later.", join("Maybe later."))
+    }
+
+    @Test
+    fun dropsClosingPeriodWhenTheSentenceContinues() {
+        assertEquals("maybe tomorrow", join("Maybe tomorrow.", before = "See you ", after = " at noon"))
+        assertEquals(" tomorrow", join("Tomorrow.", before = "See you", after = "."))
+        assertEquals("tomorrow.", join("Tomorrow.", before = "See you "))
+        assertEquals("Wait...", join("Wait...", after = " what"))
+        assertEquals(" really? ", join("Really?", before = "Is it", after = "fine"))
+    }
+
+    @Test
+    fun rewriteKeepsTheOriginalsEdges() {
+        assertEquals("maybe we should leave early", TextJoin.matchEdges("Maybe we should leave early.", " maybe we uh should leave early "))
+        assertEquals("We should leave early.", TextJoin.matchEdges("We should leave early.", "We should, um, leave early."))
+        assertEquals("John will call", TextJoin.matchEdges("John will call.", "john will call"))
+        assertEquals("One.\nTwo.", TextJoin.matchEdges("One.\nTwo.", "one two"))
+    }
+
+    @Test
     fun noTrailingSpaceBeforePunctuationOrSpace() {
         assertEquals(" fox", join("fox", before = "the", after = "."))
         assertEquals(" fox", join("fox", before = "the", after = " jumps"))

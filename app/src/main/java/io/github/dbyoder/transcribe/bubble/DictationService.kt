@@ -24,6 +24,7 @@ import io.github.dbyoder.transcribe.audio.AudioRecorder
 import io.github.dbyoder.transcribe.audio.MAX_RECORDING_SECONDS
 import io.github.dbyoder.transcribe.audio.MIN_RECORDING_SECONDS
 import io.github.dbyoder.transcribe.core.SAMPLE_RATE
+import io.github.dbyoder.transcribe.core.TextJoin
 import io.github.dbyoder.transcribe.history.TranscriptHistory
 import io.github.dbyoder.transcribe.model.ModelStore
 import io.github.dbyoder.transcribe.speech.SpeechEngine
@@ -237,8 +238,13 @@ class DictationService : AccessibilityService() {
             val millis = measureTimeMillis { formatted = Formatter.format(source, style) }
             AppSettings.markFormatUsed(this)
             TranscriptHistory.add(formatted, 0f, millis, original = source, style = style.label)
-            // Keep the spacing the original had around it, so it still fits the sentence.
-            val replacement = last.original.takeWhile { it == ' ' } + formatted + last.original.takeLastWhile { it == ' ' }
+            // A rewritten sentence fragment keeps the original's casing and (missing) full stop,
+            // and the spacing around it, so it still fits the surrounding sentence.
+            val fitted = when (style) {
+                FormatStyle.POLISH, FormatStyle.SHORTER -> TextJoin.matchEdges(formatted, last.original)
+                else -> formatted
+            }
+            val replacement = last.original.takeWhile { it == ' ' } + fitted + last.original.takeLastWhile { it == ' ' }
             if (TextInserter.replace(this, last.shown, replacement)) {
                 last.shown = replacement
                 true
