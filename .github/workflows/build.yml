@@ -1,9 +1,10 @@
 name: Build app
 
+# Push runs also report on the branch's pull request, so there's no separate
+# pull_request trigger (it would build everything twice).
 on:
   push:
-    branches: [main, "claude/**"]
-  pull_request:
+    branches: ["**"]
   workflow_dispatch:
 
 concurrency:
