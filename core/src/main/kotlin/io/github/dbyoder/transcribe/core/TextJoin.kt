@@ -94,7 +94,7 @@ object TextJoin {
         return result
     }
 
-    private fun lowercaseEverydayFirstWord(text: String): String {
+    internal fun lowercaseEverydayFirstWord(text: String): String {
         val word = text.takeWhile { it.isLetter() || it == '\'' }
         if (word.length < 1 || !word[0].isUpperCase()) return text
         if (word.drop(1).any { it.isUpperCase() }) return text // "NASA", "iPhone"-style words keep their casing

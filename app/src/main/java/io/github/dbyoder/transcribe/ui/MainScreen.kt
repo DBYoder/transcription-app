@@ -370,8 +370,10 @@ private fun CleanUpCard(enabled: Boolean, onChange: (Boolean) -> Unit) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Tidy up dictation", style = MaterialTheme.typography.titleMedium)
                 Hint(
-                    "Removes um, uh and stutters, drops fillers like \", you know,\", and turns a spoken " +
-                        "\"new line\" or \"new paragraph\" into a line break. Instant, no AI.",
+                    "Removes um, uh and stutters, and drops fillers like \", you know,\". Say punctuation " +
+                        "out loud (\"comma\", \"period\", \"question mark\", \"exclamation point\", " +
+                        "\"colon\", \"open quote\"...) to type it, and \"new line\" or \"new paragraph\" " +
+                        "for a line break. Instant, no AI.",
                 )
             }
             Switch(checked = enabled, onCheckedChange = onChange)
