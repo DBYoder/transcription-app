@@ -21,10 +21,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // The user may have just switched the bubble on or granted a permission in Settings.
+        viewModel.refreshSetup()
+    }
+
     override fun onStop() {
         super.onStop()
-        // Until the floating bubble (phase 2) adds a foreground service, Android silences
-        // the mic once the app is off screen, so finish any recording now.
+        // Android silences the mic for apps that go off screen, so finish any recording
+        // started with this screen's button. (The bubble records separately.)
         if (!isChangingConfigurations) viewModel.onAppHidden()
     }
 }

@@ -14,7 +14,7 @@ Goal: a Wispr Flow-style dictation tool for a Pixel 10a (Tensor G4, 8 GB RAM) th
 | Piece | Choice | Notes |
 |---|---|---|
 | Speech to text | NVIDIA Parakeet TDT 0.6B (int8) via sherpa-onnx | Adds punctuation and capitals itself; ~1 s for a typical sentence on a recent phone |
-| Floating bubble + inserting text | Android accessibility service | Same approach as Wispr Flow on Android. Draws the bubble without the "display over other apps" permission. Skips password fields |
+| Floating bubble + inserting text | Android accessibility service | Same approach as Wispr Flow on Android. Draws the bubble without the "display over other apps" permission. Skips password fields. Pasting puts the dictation on the clipboard too |
 | Tidy-up | Filler-word filter first; small on-device LLM later (optional) | Gemini Nano doesn't appear to be offered to apps on the 10a, so we'd bundle a ~1B model |
 | Model delivery | User downloads the model in the browser and imports it | The app has **no internet permission**; CI enforces this |
 | Install | GitHub Actions builds a signed APK on every push | One stable link: Releases → Latest build |
@@ -22,10 +22,13 @@ Goal: a Wispr Flow-style dictation tool for a Pixel 10a (Tensor G4, 8 GB RAM) th
 ## Phases
 
 1. **Test app** (done): a big mic button that records, transcribes and shows the text, with
-   timing stats. Proves speed and accuracy on the actual phone.
-2. **The bubble**: accessibility service that shows the bubble when a text field is focused,
-   positioned above the keyboard; mic foreground service; insert at the cursor (paste
-   action, falling back to set-text); clipboard fallback; saved history of recent dictations.
+   timing stats. On the Pixel 10a: 21.6 s of speech transcribed in 0.96 s (~22× real time).
+2. **The bubble** (done, awaiting on-phone testing): accessibility service that shows the
+   bubble while the keyboard is up (not in password fields), positioned above the keyboard
+   and draggable; records directly (Android binds accessibility services with the system's
+   foreground capabilities, so no foreground service or notification is needed); inserts at
+   the cursor (paste, falling back to set-text, then clipboard); saved history of recent
+   dictations; the model loads on first use and unloads after 10 idle minutes.
 3. **Polish**: filler-word removal, hold-to-talk, drag to reposition, settings, and voice
    activity detection so long dictations transcribe in chunks while you talk (keeping the wait
    short and removing the 3-minute limit).
