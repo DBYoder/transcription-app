@@ -1,0 +1,23 @@
+# Gradle / Android build output
+.gradle/
+build/
+local.properties
+*.apk
+*.aab
+
+# Downloaded at build time (see app/build.gradle.kts)
+app/libs/*.aar
+app/libs/*.part
+
+# Signing keys never belong in the repo
+*.jks
+*.keystore
+*.p12
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
