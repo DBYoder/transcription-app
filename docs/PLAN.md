@@ -37,6 +37,11 @@ Goal: a Wispr Flow-style dictation tool for a Pixel 10a (Tensor G4, 8 GB RAM) th
    um/uh/hmm with the punctuation around them, collapses stutters ("I I think"), drops
    comma-wrapped fillers (", you know,", ", like,"), and turns a spoken "new line" / "new
    paragraph" into line breaks. On by default; the original is kept in history.
+   - **Spoken punctuation** (added after testing, `core/SpokenPunctuation`): "comma", "period" /
+     "full stop", "question mark", "exclamation point/mark", "colon", "semicolon", "ellipsis",
+     "open/close quote" and "open/close paren" become the marks themselves, replacing the speech
+     model's own guess at that spot and re-casing the next word. "Period" and "colon" stay words
+     after cues like "the", "a" or "trial" ("the trial period", "a period of time").
 4. **AI formatting buttons** (done; tested on the Pixel 10a: Polish and Bullets work well,
    speed is good, in-place replacement works; Email was reworded to keep the speaker's voice): Polish, Bullets, Email and
    Shorter. They appear beside the bubble for a few seconds after a dictation and rewrite

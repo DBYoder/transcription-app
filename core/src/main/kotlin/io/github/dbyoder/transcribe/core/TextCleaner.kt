@@ -7,6 +7,8 @@ package io.github.dbyoder.transcribe.core
  * - Collapses stutters ("I I think" → "I think"), but keeps meaningful repeats
  *   ("that that", "no no").
  * - Drops comma-wrapped fillers (", you know,", ", like,", ", I mean,").
+ * - Turns spoken punctuation ("comma", "question mark", "period"...) into the marks
+ *   themselves; see [SpokenPunctuation].
  * - Turns spoken "new line" / "new paragraph" into line breaks when said on their own
  *   (so "a new line of credit" is left alone).
  *
@@ -32,7 +34,8 @@ object TextCleaner {
     private val SPOKEN_BREAK = Regex("""(?i)(^|[.!?,;:])\s*new\s+(paragraph|line)(?:[.!?,;:]+|\s*$)""")
     private val COMMA_FILLER = Regex("""(?i)([\p{L}\p{N}']+),\s*(?:you know|i mean|like),\s*""")
 
-    fun clean(text: String): String {
+    fun clean(dictated: String): String {
+        val text = SpokenPunctuation.apply(dictated)
         val out = StringBuilder()
         var segmentStart = 0
         var segmentIndex = 0
@@ -50,6 +53,7 @@ object TextCleaner {
     private fun cleanSegment(segment: String, capitalizeStart: Boolean): String {
         val kept = ArrayList<String>()
         var capitalizeNext = capitalizeStart
+        var droppedLeadingFiller = false
 
         for (token in segment.trim().split(WHITESPACE)) {
             if (token.isEmpty()) continue
@@ -58,6 +62,7 @@ object TextCleaner {
             val trailing = trailing(token)
 
             if (FILLER.matches(lower)) {
+                if (kept.isEmpty()) droppedLeadingFiller = true
                 if (dropFiller(kept, trailing)) capitalizeNext = true
                 continue
             }
@@ -84,7 +89,8 @@ object TextCleaner {
             val word = m.groupValues[1]
             if (word.lowercase() in KEEPS_COMMA) "$word, " else "$word "
         }
-        return result.trimStart(',', ';', ':', ' ')
+        // Punctuation left dangling by a removed opening filler goes; a spoken "comma" on its own stays.
+        return if (droppedLeadingFiller) result.trimStart(',', ';', ':', ' ') else result.trimStart(' ')
     }
 
     /**
