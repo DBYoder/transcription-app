@@ -9,7 +9,8 @@ model through [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx).
 **Status:** a floating mic bubble appears above your keyboard (Gboard or any other)
 in any app: tap it, speak, tap again, and the text is typed into the text box. Dictation is
 tidied up instantly (no AI): "um"s and stutters removed, and a spoken "new paragraph" becomes
-a line break. On-device AI polishing and reformatting is next; see [docs/PLAN.md](docs/PLAN.md).
+a line break. Optional on-device AI buttons (Polish, Bullets, Email, Shorter) rewrite a
+dictation for you, for example into a tidy work email. See [docs/PLAN.md](docs/PLAN.md).
 
 ## Install on your phone
 
@@ -32,8 +33,11 @@ a line break. On-device AI polishing and reformatting is next; see [docs/PLAN.md
       on screen everywhere, which the bubble doesn't need.
 5. Tap into any text box. The bubble appears above the keyboard. Tap it, speak, tap again.
    Drag the bubble to move it.
+6. Optional: in the app's **AI formatting** card, download the AI model (Google's Gemma 4
+   E2B, about 2.6 GB) and import it. Formatting buttons then appear beside the bubble after
+   each dictation, and on each dictation in the app.
 
-Later builds install over the top; the model and settings stay put.
+Later builds install over the top; models and settings stay put.
 
 ### Why an accessibility service?
 

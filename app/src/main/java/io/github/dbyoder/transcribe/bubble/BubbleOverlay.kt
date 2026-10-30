@@ -51,6 +51,16 @@ class BubbleOverlay(private val context: Context, private val onTap: () -> Unit)
 
     val isShowing: Boolean get() = attached
 
+    /** Where the bubble is on screen, in pixels. */
+    val bounds: Rect get() = Rect(params.x, params.y, params.x + sizePx, params.y + sizePx)
+
+    val isOnLeft: Boolean get() = params.x + sizePx / 2 < screenWidth / 2
+
+    val screenWidth: Int get() = screenBounds().width()
+
+    /** Called when the user starts dragging the bubble. */
+    var onDragStart: () -> Unit = {}
+
     init {
         view.setOnTouchListener(DragHandler())
     }
@@ -118,7 +128,10 @@ class BubbleOverlay(private val context: Context, private val onTap: () -> Unit)
                 MotionEvent.ACTION_MOVE -> {
                     val dx = event.rawX - downX
                     val dy = event.rawY - downY
-                    if (!dragging && hypot(dx, dy) > touchSlop) dragging = true
+                    if (!dragging && hypot(dx, dy) > touchSlop) {
+                        dragging = true
+                        onDragStart()
+                    }
                     if (dragging && attached) {
                         params.x = startX + dx.roundToInt()
                         params.y = startY + dy.roundToInt()

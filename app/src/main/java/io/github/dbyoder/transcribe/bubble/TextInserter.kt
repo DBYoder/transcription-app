@@ -25,6 +25,9 @@ object TextInserter {
         COPIED_REJECTED("copied: the app didn't accept the text", false),
     }
 
+    /** @param text exactly what went into the box, including any space added before or after. */
+    data class Result(val method: Method, val text: String)
+
     private const val CHECK_INTERVAL_MS = 100L
     private const val CHECK_ATTEMPTS = 6
 
@@ -36,67 +39,69 @@ object TextInserter {
      * 3. Replace the box's text with the dictation spliced in at the cursor.
      * 4. Leave it on the clipboard for the user to paste.
      */
-    suspend fun insert(service: AccessibilityService, text: String): Method {
-        val node = runCatching { service.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) }.getOrNull()
-            ?.takeIf { it.isEditable }
+    suspend fun insert(service: AccessibilityService, text: String): Result {
+        val node = focusedTextBox(service)
         if (node?.isPassword == true) {
             copy(service, text.trim())
-            return Method.COPIED_PASSWORD
+            return Result(Method.COPIED_PASSWORD, text.trim())
         }
         val before = node?.let(::currentText)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && typeWithInputMethod(service, text)) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val typed = typeWithInputMethod(service, text)
             // Without a node to check, trust the keyboard-style input: a fallback could duplicate the text.
-            if (node == null || waitForChange(node, before)) return Method.TYPED
+            if (typed != null && (node == null || waitForChange(node, before))) return Result(Method.TYPED, typed)
         }
 
         if (node != null) {
             val existing = before.orEmpty()
-            var start = node.textSelectionStart
-            var end = node.textSelectionEnd
-            if (start !in 0..existing.length || end !in 0..existing.length) {
-                start = existing.length
-                end = existing.length
-            }
-            val selStart = min(start, end)
-            val selEnd = max(start, end)
+            val (selStart, selEnd) = selection(node, existing)
             val insertion = TextJoin.forInsertion(text, existing.substring(0, selStart), existing.substring(selEnd))
 
             copy(service, insertion)
             if (node.performAction(AccessibilityNodeInfo.ACTION_PASTE) && waitForChange(node, before)) {
-                return Method.PASTED
+                return Result(Method.PASTED, insertion)
             }
-
             val updated = existing.substring(0, selStart) + insertion + existing.substring(selEnd)
-            val args = Bundle().apply {
-                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, updated)
-            }
-            if (node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args) && waitForChange(node, before)) {
-                val cursor = selStart + insertion.length
-                node.performAction(
-                    AccessibilityNodeInfo.ACTION_SET_SELECTION,
-                    Bundle().apply {
-                        putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, cursor)
-                        putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, cursor)
-                    },
-                )
-                return Method.SET_TEXT
+            if (setText(node, updated, cursor = selStart + insertion.length) && waitForChange(node, before)) {
+                return Result(Method.SET_TEXT, insertion)
             }
         }
 
         copy(service, text.trim())
-        return if (node == null) Method.COPIED_NO_FIELD else Method.COPIED_REJECTED
+        return Result(if (node == null) Method.COPIED_NO_FIELD else Method.COPIED_REJECTED, text.trim())
     }
 
-    /** Commits the text through the accessibility input method, like a keyboard would. */
-    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-    private fun typeWithInputMethod(service: AccessibilityService, text: String): Boolean {
-        val inputMethod = service.inputMethod ?: return false
-        if (!inputMethod.currentInputStarted) return false
-        val connection = inputMethod.currentInputConnection ?: return false
-        val editor = inputMethod.currentInputEditorInfo
-        if (editor != null && isPasswordInput(editor.inputType)) return false
+    /**
+     * Swaps [old] (text this app just put in, right before the cursor) for [new]. Used by the
+     * formatting buttons and their Undo. Returns false if the text box has changed since, so the
+     * caller can fall back to the clipboard rather than edit the wrong text.
+     */
+    suspend fun replace(service: AccessibilityService, old: String, new: String): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && replaceWithInputMethod(service, old, new)) {
+            return true
+        }
+        val node = focusedTextBox(service) ?: return false
+        if (node.isPassword) return false
+        val existing = currentText(node) ?: return false
+        val index = existing.lastIndexOf(old)
+        if (index < 0) return false
+        val updated = existing.substring(0, index) + new + existing.substring(index + old.length)
+        return setText(node, updated, cursor = index + new.length) && waitForChange(node, existing)
+    }
 
+    fun copy(service: AccessibilityService, text: String) {
+        val clipboard = service.getSystemService(ClipboardManager::class.java)
+        clipboard.setPrimaryClip(ClipData.newPlainText("Dictation", text))
+    }
+
+    private fun focusedTextBox(service: AccessibilityService): AccessibilityNodeInfo? =
+        runCatching { service.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) }.getOrNull()?.takeIf { it.isEditable }
+
+    /** Commits the text through the accessibility input method. Returns what was typed, or null. */
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    private fun typeWithInputMethod(service: AccessibilityService, text: String): String? {
+        val connection = inputConnection(service) ?: return null
         val around = runCatching { connection.getSurroundingText(200, 200, 0) }.getOrNull()
         val insertion = if (around != null) {
             val surrounding = around.text.toString()
@@ -107,6 +112,50 @@ object TextInserter {
             text.trim()
         }
         connection.commitText(insertion, 1, null)
+        return insertion
+    }
+
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    private fun replaceWithInputMethod(service: AccessibilityService, old: String, new: String): Boolean {
+        val connection = inputConnection(service) ?: return false
+        val around = runCatching { connection.getSurroundingText(old.length + 8, 0, 0) }.getOrNull() ?: return false
+        if (around.selectionStart != around.selectionEnd) return false // something is selected; leave it
+        val text = around.text.toString()
+        val beforeCursor = text.substring(0, around.selectionStart.coerceIn(0, text.length))
+        if (!beforeCursor.endsWith(old)) return false
+        connection.deleteSurroundingText(old.length, 0)
+        connection.commitText(new, 1, null)
+        return true
+    }
+
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    private fun inputConnection(service: AccessibilityService) = service.inputMethod
+        ?.takeIf { it.currentInputStarted }
+        ?.takeUnless { im -> im.currentInputEditorInfo?.let { isPasswordInput(it.inputType) } == true }
+        ?.currentInputConnection
+
+    private fun selection(node: AccessibilityNodeInfo, existing: String): Pair<Int, Int> {
+        var start = node.textSelectionStart
+        var end = node.textSelectionEnd
+        if (start !in 0..existing.length || end !in 0..existing.length) {
+            start = existing.length
+            end = existing.length
+        }
+        return min(start, end) to max(start, end)
+    }
+
+    private fun setText(node: AccessibilityNodeInfo, text: String, cursor: Int): Boolean {
+        val args = Bundle().apply {
+            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+        }
+        if (!node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) return false
+        node.performAction(
+            AccessibilityNodeInfo.ACTION_SET_SELECTION,
+            Bundle().apply {
+                putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, cursor)
+                putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, cursor)
+            },
+        )
         return true
     }
 
@@ -138,10 +187,5 @@ object TextInserter {
             InputType.TYPE_CLASS_NUMBER -> variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD
             else -> false
         }
-    }
-
-    private fun copy(service: AccessibilityService, text: String) {
-        val clipboard = service.getSystemService(ClipboardManager::class.java)
-        clipboard.setPrimaryClip(ClipData.newPlainText("Dictation", text))
     }
 }

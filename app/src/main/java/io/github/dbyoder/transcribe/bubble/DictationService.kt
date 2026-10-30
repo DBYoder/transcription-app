@@ -16,7 +16,10 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import android.widget.Toast
+import io.github.dbyoder.transcribe.AppSettings
 import io.github.dbyoder.transcribe.MainActivity
+import io.github.dbyoder.transcribe.ai.Formatter
+import io.github.dbyoder.transcribe.core.FormatStyle
 import io.github.dbyoder.transcribe.audio.AudioRecorder
 import io.github.dbyoder.transcribe.audio.MAX_RECORDING_SECONDS
 import io.github.dbyoder.transcribe.audio.MIN_RECORDING_SECONDS
@@ -46,15 +49,23 @@ class DictationService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
     private val recorder = AudioRecorder(MAX_RECORDING_SECONDS)
     private lateinit var bubble: BubbleOverlay
+    private lateinit var formatBar: FormatBar
     private var state = BubbleState.IDLE
     private var lastKeyboardTop: Int? = null
     private var lastWarmUp = 0L
     private var destroyed = false
 
+    /** The latest dictation the formatting buttons work on. */
+    private class LastDictation(val original: String, var shown: String)
+
+    private var lastDictation: LastDictation? = null
+
     private val refresh = Runnable { updateBubble() }
 
     override fun onServiceConnected() {
         bubble = BubbleOverlay(this, ::onBubbleTapped)
+        formatBar = FormatBar(this, onFormat = ::onFormatTapped, onUndo = ::onUndoTapped)
+        bubble.onDragStart = { formatBar.hide() }
         updateBubble()
     }
 
@@ -73,6 +84,7 @@ class DictationService : AccessibilityService() {
         destroyed = true
         handler.removeCallbacks(refresh)
         recorder.cancel()
+        if (::formatBar.isInitialized) formatBar.hide()
         if (::bubble.isInitialized) bubble.hide()
         scope.cancel()
         super.onDestroy()
@@ -97,10 +109,18 @@ class DictationService : AccessibilityService() {
             focus?.packageName?.toString() != packageName
         if (typing) {
             bubble.show(keyboardTop)
+            if (formatBar.isShowing) showFormatBar() // follow the bubble
             warmUp()
         } else {
+            formatBar.hide()
             bubble.hide()
         }
+    }
+
+    private fun showFormatBar() {
+        val last = lastDictation ?: return formatBar.hide()
+        if (!bubble.isShowing) return formatBar.hide()
+        formatBar.show(bubble.bounds, bubble.isOnLeft, bubble.screenWidth, showUndo = last.shown != last.original)
     }
 
     /** Top edge of the on-screen keyboard, or null if no keyboard is showing. */
@@ -142,6 +162,8 @@ class DictationService : AccessibilityService() {
             openApp()
             return
         }
+        formatBar.hide()
+        lastDictation = null
         try {
             recorder.start(
                 scope = scope,
@@ -161,6 +183,7 @@ class DictationService : AccessibilityService() {
     private suspend fun finishDictation() {
         if (state != BubbleState.RECORDING) return
         setState(BubbleState.TRANSCRIBING)
+        var offerFormatting = false
         try {
             val samples = recorder.stop()
             val seconds = samples.size / SAMPLE_RATE.toFloat()
@@ -175,9 +198,14 @@ class DictationService : AccessibilityService() {
                     if (text.isBlank()) {
                         toast("No speech detected")
                     } else {
-                        val method = TextInserter.insert(this, text)
-                        TranscriptHistory.add(text, seconds, millis, original = raw, insertedVia = method.label)
-                        when (method) {
+                        val result = TextInserter.insert(this, text)
+                        TranscriptHistory.add(text, seconds, millis, original = raw, insertedVia = result.method.label)
+                        if (result.method.inserted && Formatter.isInstalled()) {
+                            lastDictation = LastDictation(original = result.text, shown = result.text)
+                            offerFormatting = true
+                            warmUpFormatter()
+                        }
+                        when (result.method) {
                             TextInserter.Method.COPIED_NO_FIELD ->
                                 toast("Couldn't find the text box, so it's on your clipboard to paste.")
                             TextInserter.Method.COPIED_PASSWORD ->
@@ -196,6 +224,74 @@ class DictationService : AccessibilityService() {
         } finally {
             setState(BubbleState.IDLE)
             updateBubble()
+            if (offerFormatting) showFormatBar()
+        }
+    }
+
+    // --- AI formatting ------------------------------------------------------------------
+
+    private fun onFormatTapped(style: FormatStyle) {
+        runFormatting { last ->
+            val source = last.original.trim()
+            var formatted = ""
+            val millis = measureTimeMillis { formatted = Formatter.format(source, style) }
+            AppSettings.markFormatUsed(this)
+            TranscriptHistory.add(formatted, 0f, millis, original = source, style = style.label)
+            // Keep the spacing the original had around it, so it still fits the sentence.
+            val replacement = last.original.takeWhile { it == ' ' } + formatted + last.original.takeLastWhile { it == ' ' }
+            if (TextInserter.replace(this, last.shown, replacement)) {
+                last.shown = replacement
+                true
+            } else {
+                TextInserter.copy(this, formatted)
+                toast("The text box changed, so the ${style.label.lowercase()} version is on your clipboard.")
+                false
+            }
+        }
+    }
+
+    private fun onUndoTapped() {
+        runFormatting { last ->
+            if (last.shown == last.original) return@runFormatting true
+            if (TextInserter.replace(this, last.shown, last.original)) {
+                last.shown = last.original
+                true
+            } else {
+                TextInserter.copy(this, last.original.trim())
+                toast("The text box changed, so your original wording is on your clipboard.")
+                false
+            }
+        }
+    }
+
+    /** Runs a formatting [action] on the latest dictation; it returns false to retire the buttons. */
+    private fun runFormatting(action: suspend (LastDictation) -> Boolean) {
+        val last = lastDictation ?: return
+        if (state != BubbleState.IDLE) return
+        setState(BubbleState.TRANSCRIBING)
+        formatBar.setBusy(true)
+        scope.launch {
+            var keep = true
+            try {
+                keep = action(last)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                reject("Formatting failed: ${e.message}")
+            } finally {
+                if (!keep) lastDictation = null
+                setState(BubbleState.IDLE)
+                formatBar.setBusy(false)
+                updateBubble()
+                if (lastDictation != null) showFormatBar() else formatBar.hide()
+            }
+        }
+    }
+
+    /** Loads the formatting AI ahead of time, but only for people who've used it lately. */
+    private fun warmUpFormatter() {
+        if (AppSettings.formattedRecently(this)) {
+            scope.launch { runCatching { Formatter.ensureLoaded() } }
         }
     }
 

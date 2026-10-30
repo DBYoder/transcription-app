@@ -12,6 +12,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +44,7 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -58,17 +61,21 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.dbyoder.transcribe.AiModelState
 import io.github.dbyoder.transcribe.MainViewModel
 import io.github.dbyoder.transcribe.ModelState
 import io.github.dbyoder.transcribe.R
 import io.github.dbyoder.transcribe.RecorderState
 import io.github.dbyoder.transcribe.SetupState
 import io.github.dbyoder.transcribe.UiState
+import io.github.dbyoder.transcribe.ai.FormatModelStore
 import io.github.dbyoder.transcribe.bubble.DictationService
+import io.github.dbyoder.transcribe.core.FormatStyle
 import io.github.dbyoder.transcribe.history.Transcript
 import io.github.dbyoder.transcribe.model.ModelStore
 import kotlinx.coroutines.launch
@@ -86,6 +93,9 @@ fun MainScreen(viewModel: MainViewModel) {
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.importModel(uri)
+    }
+    val aiImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) viewModel.importAiModel(uri)
     }
     val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         viewModel.refreshSetup()
@@ -163,6 +173,15 @@ fun MainScreen(viewModel: MainViewModel) {
                     )
                 }
                 item { CleanUpCard(enabled = state.cleanUp, onChange = viewModel::setCleanUp) }
+                item {
+                    FormatCard(
+                        ai = state.ai,
+                        onDownload = { openLink(uriHandler, FormatModelStore.RECOMMENDED_MODEL_URL, viewModel) },
+                        onOpenPage = { openLink(uriHandler, FormatModelStore.RECOMMENDED_MODEL_PAGE, viewModel) },
+                        onImport = { aiImportLauncher.launch(arrayOf("*/*")) },
+                        onRemove = viewModel::removeAiModel,
+                    )
+                }
             }
             item { MicSection(state, onMic) }
             if (history.isNotEmpty()) {
@@ -174,7 +193,13 @@ fun MainScreen(viewModel: MainViewModel) {
                 }
             }
             items(history, key = { it.id }) { transcript ->
-                TranscriptCard(transcript, onCopy = { clipboard.setText(AnnotatedString(transcript.text)) })
+                TranscriptCard(
+                    transcript = transcript,
+                    onCopy = { clipboard.setText(AnnotatedString(transcript.text)) },
+                    canFormat = state.ai is AiModelState.Ready && state.formattingId == null,
+                    formatting = state.formattingId == transcript.id,
+                    onFormat = { style -> viewModel.format(transcript, style) },
+                )
             }
         }
     }
@@ -418,7 +443,13 @@ private fun MicSection(state: UiState, onMic: () -> Unit) {
 }
 
 @Composable
-private fun TranscriptCard(transcript: Transcript, onCopy: () -> Unit) {
+private fun TranscriptCard(
+    transcript: Transcript,
+    onCopy: () -> Unit,
+    canFormat: Boolean,
+    formatting: Boolean,
+    onFormat: (FormatStyle) -> Unit,
+) {
     OutlinedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(start = 16.dp, top = 8.dp, end = 4.dp, bottom = 12.dp)) {
             Row(verticalAlignment = Alignment.Top) {
@@ -432,7 +463,7 @@ private fun TranscriptCard(transcript: Transcript, onCopy: () -> Unit) {
             val original = transcript.original
             if (original != null) {
                 Text(
-                    "Before tidy-up: $original",
+                    (if (transcript.style != null) "From: " else "Before tidy-up: ") + original,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(end = 12.dp, bottom = 4.dp),
@@ -443,6 +474,78 @@ private fun TranscriptCard(transcript: Transcript, onCopy: () -> Unit) {
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (formatting) {
+                Column(Modifier.padding(top = 8.dp, end = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                    Hint("Formatting on the phone… the first one takes longer while the AI model loads.")
+                }
+            } else if (canFormat) {
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()).padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    for (style in FormatStyle.entries) {
+                        SuggestionChip(onClick = { onFormat(style) }, label = { Text(style.label) })
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FormatCard(
+    ai: AiModelState,
+    onDownload: () -> Unit,
+    onOpenPage: () -> Unit,
+    onImport: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            when (ai) {
+                AiModelState.Missing -> {
+                    Text("AI formatting (optional)", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Adds Polish, Bullets, Email and Shorter buttons, next to the bubble right after you " +
+                            "dictate and on each dictation below. It uses Google's Gemma 4 model, which runs on " +
+                            "this phone like everything else. It's a one-time 2.6 GB download, and each tap " +
+                            "takes a few seconds.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Button(onClick = onDownload, modifier = Modifier.fillMaxWidth()) { Text("1. Download the AI model") }
+                    Hint("Opens in your browser; Wi-Fi recommended. If it doesn't start, open the model page and download the file ending in .litertlm.")
+                    TextButton(onClick = onOpenPage) { Text("Open the model page") }
+                    Button(onClick = onImport, modifier = Modifier.fillMaxWidth()) { Text("2. Import the downloaded file") }
+                    Hint("Pick the .litertlm file from Downloads. You can delete the download afterwards.")
+                }
+
+                is AiModelState.Installing -> {
+                    Text("Copying the AI model…", style = MaterialTheme.typography.titleMedium)
+                    val fraction = ai.fraction
+                    if (fraction == null) {
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                    } else {
+                        LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
+                    }
+                    Hint("This takes a minute or two. Keep the app open.")
+                }
+
+                is AiModelState.Ready -> {
+                    Text("AI formatting is on", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "After you dictate with the bubble, tap Polish, Bullets, Email or Shorter next to it to " +
+                            "rewrite what you just said (Undo puts it back). The same buttons are on each " +
+                            "dictation below. The first tap takes longer while the model loads.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Hint("Model: ${ai.name}")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = onImport) { Text("Replace") }
+                        TextButton(onClick = onRemove) { Text("Remove (frees storage)") }
+                    }
+                }
+            }
         }
     }
 }
@@ -462,10 +565,21 @@ private fun formatDuration(seconds: Float): String {
 
 private fun statsLine(t: Transcript): String {
     val processSeconds = t.processMillis / 1000f
+    if (t.style != null) {
+        return "${DateUtils.getRelativeTimeSpanString(t.createdAt)}  ·  ${t.style}  ·  formatted in %.1f s".format(processSeconds)
+    }
     val speed = if (t.processMillis > 0) "  ·  %.0f× real time".format(t.audioSeconds / processSeconds) else ""
     val time = DateUtils.getRelativeTimeSpanString(t.createdAt)
     val via = t.insertedVia?.let { "  ·  $it" }.orEmpty()
     return "$time  ·  %.1f s → %.2f s%s".format(t.audioSeconds, processSeconds, speed) + via
+}
+
+private fun openLink(uriHandler: UriHandler, url: String, viewModel: MainViewModel) {
+    try {
+        uriHandler.openUri(url)
+    } catch (e: Exception) {
+        viewModel.showMessage("Couldn't open a browser. The link is in the project README.")
+    }
 }
 
 private fun openAppInfo(context: Context) {

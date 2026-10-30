@@ -11,6 +11,8 @@ object AppSettings {
     private const val KEY_BUBBLE_LEFT = "bubble_left"
     private const val KEY_BUBBLE_OFFSET_DP = "bubble_offset_dp"
     private const val KEY_CLEAN_UP = "clean_up"
+    private const val KEY_LAST_FORMAT_USE = "last_format_use"
+    private const val RECENT_FORMAT_MS = 24 * 60 * 60 * 1000L
 
     /** How far the bubble's bottom sits above the top of the keyboard, by default. */
     const val DEFAULT_BUBBLE_OFFSET_DP = 96f
@@ -30,6 +32,14 @@ object AppSettings {
     fun setCleanUp(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_CLEAN_UP, enabled).apply()
     }
+
+    fun markFormatUsed(context: Context) {
+        prefs(context).edit().putLong(KEY_LAST_FORMAT_USE, System.currentTimeMillis()).apply()
+    }
+
+    /** True if an AI formatting button was used in the last day (worth loading the model early). */
+    fun formattedRecently(context: Context): Boolean =
+        System.currentTimeMillis() - prefs(context).getLong(KEY_LAST_FORMAT_USE, 0L) < RECENT_FORMAT_MS
 
     fun bubbleOnLeft(context: Context): Boolean = prefs(context).getBoolean(KEY_BUBBLE_LEFT, false)
 

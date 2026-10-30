@@ -22,6 +22,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Transcribe">
 
+        <!-- Lets the formatting AI use the phone's GPU (it falls back to the CPU without them). -->
+        <uses-native-library android:name="libOpenCL.so" android:required="false" />
+        <uses-native-library android:name="libvndksupport.so" android:required="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
