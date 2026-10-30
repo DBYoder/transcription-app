@@ -26,9 +26,13 @@ Goal: a Wispr Flow-style dictation tool for a Pixel 10a (Tensor G4, 8 GB RAM) th
 2. **The bubble** (done, awaiting on-phone testing): accessibility service that shows the
    bubble while the keyboard is up (not in password fields), positioned above the keyboard
    and draggable; records directly (Android binds accessibility services with the system's
-   foreground capabilities, so no foreground service or notification is needed); inserts at
-   the cursor (paste, falling back to set-text, then clipboard); saved history of recent
-   dictations; the model loads on first use and unloads after 10 idle minutes.
+   foreground capabilities, so no foreground service or notification is needed); saved history
+   of recent dictations; the model loads on first use and unloads after 10 idle minutes.
+   Tested on the Pixel 10a: the bubble appears and transcribes correctly. First build fell back
+   to the clipboard instead of typing, so insertion now types through Android 13's
+   accessibility input method (like a keyboard, no clipboard), checks the text box actually
+   changed, then falls back to paste, set-text, and finally the clipboard. Each dictation
+   records which method worked.
 3. **Instant tidy-up** (done): rule-based, no AI, no delay (`core/TextCleaner`). Removes
    um/uh/hmm with the punctuation around them, collapses stutters ("I I think"), drops
    comma-wrapped fillers (", you know,", ", like,"), and turns a spoken "new line" / "new
@@ -53,6 +57,9 @@ Goal: a Wispr Flow-style dictation tool for a Pixel 10a (Tensor G4, 8 GB RAM) th
 
 - Android hides the accessibility switch for apps installed outside the Play Store until you
   go to **App info → ⋮ → Allow restricted settings**.
+- Turn on only "Use Transcribe" in accessibility settings. "Transcribe shortcut" adds Android's
+  own floating accessibility button (the app icon, on screen everywhere), which isn't needed;
+  the app warns when it's on.
 - Battery optimisation can switch the service off; setting the app's battery use to
   "Unrestricted" may be needed.
 - Google's developer verification for sideloaded apps is planned to reach the US in 2027.

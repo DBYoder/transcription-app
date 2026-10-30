@@ -289,7 +289,20 @@ private fun BubbleCard(
                     Text("The bubble needs microphone access.", color = MaterialTheme.colorScheme.error)
                     Button(onClick = onAllowMic, modifier = Modifier.fillMaxWidth()) { Text("Allow microphone") }
                 }
-                TextButton(onClick = onOpenAccessibility) { Text("Turn off in accessibility settings") }
+                if (setup.shortcutButtonOn) {
+                    Text(
+                        "Android's accessibility shortcut is also on for Transcribe. That's the extra mic " +
+                            "button that stays on screen everywhere. You don't need it: open the settings below " +
+                            "and turn off \"Transcribe shortcut\" (keep \"Use Transcribe\" on).",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Button(onClick = onOpenAccessibility, modifier = Modifier.fillMaxWidth()) {
+                        Text("Turn off the shortcut")
+                    }
+                } else {
+                    TextButton(onClick = onOpenAccessibility) { Text("Turn off in accessibility settings") }
+                }
             } else {
                 Text("Turn on the floating bubble", style = MaterialTheme.typography.titleMedium)
                 Text(
@@ -307,7 +320,10 @@ private fun BubbleCard(
                 Button(onClick = onOpenAccessibility, modifier = Modifier.fillMaxWidth()) {
                     Text(if (setup.micGranted) "Turn on the bubble" else "2. Turn on the bubble")
                 }
-                Hint("Find Transcribe in the list (it may be under Downloaded apps) and switch it on.")
+                Hint(
+                    "Find Transcribe in the list (it may be under Downloaded apps) and switch on \"Use " +
+                        "Transcribe\". Leave \"Transcribe shortcut\" off: the bubble appears by itself.",
+                )
                 Hint(
                     "If the switch is greyed out or says \"Restricted setting\": open App info, tap ⋮ in the top " +
                         "corner, choose Allow restricted settings, then try again.",
@@ -448,7 +464,8 @@ private fun statsLine(t: Transcript): String {
     val processSeconds = t.processMillis / 1000f
     val speed = if (t.processMillis > 0) "  ·  %.0f× real time".format(t.audioSeconds / processSeconds) else ""
     val time = DateUtils.getRelativeTimeSpanString(t.createdAt)
-    return "$time  ·  %.1f s → %.2f s%s".format(t.audioSeconds, processSeconds, speed)
+    val via = t.insertedVia?.let { "  ·  $it" }.orEmpty()
+    return "$time  ·  %.1f s → %.2f s%s".format(t.audioSeconds, processSeconds, speed) + via
 }
 
 private fun openAppInfo(context: Context) {

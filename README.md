@@ -24,10 +24,12 @@ a line break. On-device AI polishing and reformatting is next; see [docs/PLAN.md
       two, and you can delete the download afterwards.
 4. Turn on the floating bubble from the app's **Turn on the bubble** card:
    1. Allow microphone access.
-   2. Switch on **Transcribe** in Android's accessibility settings (it may be under
+   2. Switch on **Use Transcribe** in Android's accessibility settings (it may be under
       *Downloaded apps*). If the switch is greyed out or says *Restricted setting*, open
       **App info → ⋮ → Allow restricted settings** and try again. Android requires this
       extra step for accessibility services in apps installed outside the Play Store.
+      Leave **Transcribe shortcut** off: it adds Android's own floating button that stays
+      on screen everywhere, which the bubble doesn't need.
 5. Tap into any text box. The bubble appears above the keyboard. Tap it, speak, tap again.
    Drag the bubble to move it.
 

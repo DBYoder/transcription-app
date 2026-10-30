@@ -24,6 +24,8 @@ data class Transcript(
     val createdAt: Long,
     /** What the speech model heard, when clean-up changed it. */
     val original: String? = null,
+    /** How the bubble put the text into the app ("typed", "pasted", "copied: ..."); null for the app screen. */
+    val insertedVia: String? = null,
 )
 
 /**
@@ -48,7 +50,13 @@ object TranscriptHistory {
         _items.value = loaded
     }
 
-    fun add(text: String, audioSeconds: Float, processMillis: Long, original: String? = null) {
+    fun add(
+        text: String,
+        audioSeconds: Float,
+        processMillis: Long,
+        original: String? = null,
+        insertedVia: String? = null,
+    ) {
         val item = Transcript(
             id = nextId.getAndIncrement(),
             text = text,
@@ -56,6 +64,7 @@ object TranscriptHistory {
             processMillis = processMillis,
             createdAt = System.currentTimeMillis(),
             original = original?.takeIf { it != text },
+            insertedVia = insertedVia,
         )
         _items.update { (listOf(item) + it).take(MAX_ITEMS) }
         persist()
@@ -87,7 +96,10 @@ object TranscriptHistory {
                     .put("audioSeconds", t.audioSeconds.toDouble())
                     .put("processMillis", t.processMillis)
                     .put("createdAt", t.createdAt)
-                    .apply { if (t.original != null) put("original", t.original) },
+                    .apply {
+                        if (t.original != null) put("original", t.original)
+                        if (t.insertedVia != null) put("insertedVia", t.insertedVia)
+                    },
             )
         }
         return array.toString()
@@ -104,6 +116,7 @@ object TranscriptHistory {
                 processMillis = o.getLong("processMillis"),
                 createdAt = o.getLong("createdAt"),
                 original = if (o.has("original")) o.getString("original") else null,
+                insertedVia = if (o.has("insertedVia")) o.getString("insertedVia") else null,
             )
         }
     }

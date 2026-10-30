@@ -2,12 +2,13 @@
 <!--
     The bubble only needs to know when a text box is focused and where the keyboard is:
     focus and window events, plus permission to look at windows so it can find the
-    keyboard and the focused text box.
+    keyboard and the focused text box. flagInputMethodEditor (Android 13+) lets it type
+    the dictation into that text box the way a keyboard does, without the clipboard.
 -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeViewFocused|typeWindowStateChanged|typeWindowsChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:accessibilityFlags="flagRetrieveInteractiveWindows"
+    android:accessibilityFlags="flagRetrieveInteractiveWindows|flagInputMethodEditor"
     android:canRetrieveWindowContent="true"
     android:description="@string/bubble_service_description"
     android:isAccessibilityTool="false"
