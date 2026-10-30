@@ -47,6 +47,8 @@ sealed interface RecorderState {
 data class SetupState(
     val micGranted: Boolean = false,
     val bubbleEnabled: Boolean = false,
+    /** Android's extra floating accessibility button is on for Transcribe (not needed). */
+    val shortcutButtonOn: Boolean = false,
 )
 
 data class UiState(
@@ -83,6 +85,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val setup = SetupState(
             micGranted = app.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED,
             bubbleEnabled = DictationService.isEnabled(app),
+            shortcutButtonOn = DictationService.isShortcutButtonOn(app),
         )
         _state.update { it.copy(setup = setup) }
     }

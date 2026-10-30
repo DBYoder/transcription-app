@@ -175,9 +175,16 @@ class DictationService : AccessibilityService() {
                     if (text.isBlank()) {
                         toast("No speech detected")
                     } else {
-                        TranscriptHistory.add(text, seconds, millis, original = raw)
-                        if (TextInserter.insert(this, text) == TextInserter.Result.COPIED) {
-                            toast("Copied. Long-press a text box and tap Paste.")
+                        val method = TextInserter.insert(this, text)
+                        TranscriptHistory.add(text, seconds, millis, original = raw, insertedVia = method.label)
+                        when (method) {
+                            TextInserter.Method.COPIED_NO_FIELD ->
+                                toast("Couldn't find the text box, so it's on your clipboard to paste.")
+                            TextInserter.Method.COPIED_PASSWORD ->
+                                toast("Password fields are skipped. It's on your clipboard instead.")
+                            TextInserter.Method.COPIED_REJECTED ->
+                                toast("This app didn't take the text, so it's on your clipboard. Long-press the box and tap Paste.")
+                            else -> Unit
                         }
                     }
                 }
@@ -219,6 +226,18 @@ class DictationService : AccessibilityService() {
                 Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
             ) ?: return false
             return enabled.split(':').any { ComponentName.unflattenFromString(it) == ours }
+        }
+
+        /**
+         * Whether Android's own floating accessibility button is set up for Transcribe. It shows
+         * the app icon on screen all the time and isn't needed: the bubble appears by itself.
+         */
+        fun isShortcutButtonOn(context: Context): Boolean {
+            val ours = ComponentName(context, DictationService::class.java)
+            val targets = runCatching {
+                Settings.Secure.getString(context.contentResolver, "accessibility_button_targets")
+            }.getOrNull() ?: return false
+            return targets.split(':').any { ComponentName.unflattenFromString(it) == ours }
         }
     }
 }
