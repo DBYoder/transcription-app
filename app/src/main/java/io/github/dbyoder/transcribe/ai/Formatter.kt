@@ -23,7 +23,7 @@ import kotlin.system.measureTimeMillis
 
 /**
  * Rewrites dictated text with a small AI model running on the phone (LiteRT-LM), for the
- * Polish / Bullets / Email / Shorter buttons.
+ * Polish / Bullets / Email / Shorter / Prompt buttons.
  *
  * The model is big (a couple of GB in memory), so it loads on first use (GPU if the phone
  * allows, otherwise CPU) and unloads after [IDLE_UNLOAD_MS] without use.
@@ -68,7 +68,7 @@ object Formatter {
                 conversation.sendMessage(FormatStyle.prompt(style, text)).toString()
             }
             scheduleIdleUnload()
-            FormatOutput.clean(reply).ifBlank { throw IllegalStateException("The AI model returned nothing") }
+            FormatOutput.clean(reply, style.bullet).ifBlank { throw IllegalStateException("The AI model returned nothing") }
         }
     }
 

@@ -1,7 +1,12 @@
 package io.github.dbyoder.transcribe.core
 
-/** The one-tap AI formatting options, with the instructions given to the on-device model. */
-enum class FormatStyle(val label: String, val instruction: String) {
+/**
+ * The one-tap AI formatting options, with the instructions given to the on-device model.
+ *
+ * @param bullet how list items are written in the result: plain "• " reads well in any text
+ *   box, while "- " is Markdown, which AI chat apps understand and render as a list.
+ */
+enum class FormatStyle(val label: String, val instruction: String, val bullet: String = "• ") {
     POLISH(
         "Polish",
         "Rewrite the dictated text so it reads cleanly. Fix grammar, punctuation and capitalization. " +
@@ -32,13 +37,25 @@ enum class FormatStyle(val label: String, val instruction: String) {
         "Rewrite the dictated text to be about half as long while keeping every important point, name, " +
             "number and date. Keep the speaker's tone.",
     ),
+    PROMPT(
+        "Prompt",
+        "The dictated text is the speaker describing what they want from an AI assistant. Rewrite it as a " +
+            "clear, effective prompt for that assistant. Start by stating the task directly. Then add short " +
+            "sections, each on its own line, only where the dictation gives the information: \"Context:\" " +
+            "(background the assistant needs), \"Requirements:\" (specific constraints, as bullets that start " +
+            "with \"- \") and \"Output:\" (the format, length or style they want back). Keep every goal, " +
+            "detail, constraint and preference they gave, and don't invent new ones. Remove filler, repetition " +
+            "and false starts, and keep only the corrected version when they correct themselves. Write it as " +
+            "instructions addressed to the assistant. Don't answer or carry out the request yourself.",
+        bullet = "- ",
+    ),
     ;
 
     companion object {
         const val SYSTEM_INSTRUCTION =
             "You edit text that someone dictated by voice. It should still sound like them: keep their " +
-                "own words, phrasing and tone unless asked otherwise. Reply with only the edited text: no " +
-                "introduction, explanation, quotation marks or headings."
+                "own words, phrasing and tone unless asked otherwise. Reply with only the edited text, with no " +
+                "introduction, explanation or quotation marks around it."
 
         /** The message sent to the model for [text]. */
         fun prompt(style: FormatStyle, text: String): String =
@@ -55,14 +72,15 @@ object FormatOutput {
     private val HEADING = Regex("""^#{1,6}\s+""", RegexOption.MULTILINE)
     private val BLANK_LINES = Regex("""\n{3,}""")
 
-    fun clean(reply: String): String {
+    /** @param bullet what each list item should start with (see [FormatStyle.bullet]). */
+    fun clean(reply: String, bullet: String = "• "): String {
         var s = reply.trim()
         s = PREAMBLE.replace(s, "").trim()
         FENCE.matchEntire(s)?.let { s = it.groupValues[1].trim() }
         s = stripWrappingQuotes(s)
         s = BOLD.replace(s) { it.groupValues[1].ifEmpty { it.groupValues[2] } }
         s = HEADING.replace(s, "")
-        s = BULLET.replace(s) { "${it.groupValues[1]}• " } // plain-text bullets look right everywhere
+        s = BULLET.replace(s) { it.groupValues[1] + bullet }
         s = BLANK_LINES.replace(s, "\n\n")
         return s.trim()
     }

@@ -9,8 +9,8 @@ model through [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx).
 **Status:** a floating mic bubble appears above your keyboard (Gboard or any other)
 in any app: tap it, speak, tap again, and the text is typed into the text box. Dictation is
 tidied up instantly (no AI): "um"s and stutters removed, and a spoken "new paragraph" becomes
-a line break. Optional on-device AI buttons (Polish, Bullets, Email, Shorter) rewrite a
-dictation for you, for example into a tidy work email. See [docs/PLAN.md](docs/PLAN.md).
+a line break. Optional on-device AI buttons (Polish, Bullets, Email, Shorter, Prompt) rewrite a
+dictation for you, for example into a tidy work email or a well-structured prompt for an AI chat. See [docs/PLAN.md](docs/PLAN.md).
 
 ## Install on your phone
 
