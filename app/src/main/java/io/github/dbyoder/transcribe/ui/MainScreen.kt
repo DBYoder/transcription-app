@@ -1,11 +1,13 @@
 package io.github.dbyoder.transcribe.ui
 
 import android.Manifest
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
+import android.text.format.DateUtils
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
@@ -45,8 +47,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -55,33 +59,37 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.dbyoder.transcribe.MainViewModel
 import io.github.dbyoder.transcribe.ModelState
 import io.github.dbyoder.transcribe.R
 import io.github.dbyoder.transcribe.RecorderState
-import io.github.dbyoder.transcribe.Transcript
+import io.github.dbyoder.transcribe.SetupState
 import io.github.dbyoder.transcribe.UiState
+import io.github.dbyoder.transcribe.bubble.DictationService
+import io.github.dbyoder.transcribe.history.Transcript
 import io.github.dbyoder.transcribe.model.ModelStore
 import kotlinx.coroutines.launch
 
 @Composable
 fun MainScreen(viewModel: MainViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val history by viewModel.history.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val clipboard = LocalClipboardManager.current
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    var recordAfterGrant by remember { mutableStateOf(false) }
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.importModel(uri)
     }
     val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        viewModel.refreshSetup()
         if (granted) {
-            viewModel.toggleRecording()
+            if (recordAfterGrant) viewModel.toggleRecording()
         } else {
             scope.launch {
                 val result = snackbar.showSnackbar(
@@ -89,9 +97,10 @@ fun MainScreen(viewModel: MainViewModel) {
                     actionLabel = "Settings",
                     duration = SnackbarDuration.Long,
                 )
-                if (result == SnackbarResult.ActionPerformed) openAppSettings(context)
+                if (result == SnackbarResult.ActionPerformed) openAppInfo(context)
             }
         }
+        recordAfterGrant = false
     }
 
     LaunchedEffect(state.message) {
@@ -108,10 +117,15 @@ fun MainScreen(viewModel: MainViewModel) {
         }
     }
     val onImport = { importLauncher.launch(arrayOf("*/*")) }
+    val onAllowMic = {
+        recordAfterGrant = false
+        micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+    }
     val onMic = {
         if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
             viewModel.toggleRecording()
         } else {
+            recordAfterGrant = true
             micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
@@ -138,11 +152,26 @@ fun MainScreen(viewModel: MainViewModel) {
                     onThreads = viewModel::setThreads,
                 )
             }
-            item { MicSection(state, onMic) }
-            if (state.transcripts.isNotEmpty()) {
-                item { Text("Results", style = MaterialTheme.typography.titleMedium) }
+            if (state.model is ModelState.Ready) {
+                item {
+                    BubbleCard(
+                        setup = state.setup,
+                        onAllowMic = onAllowMic,
+                        onOpenAccessibility = { openBubbleSettings(context) },
+                        onOpenAppInfo = { openAppInfo(context) },
+                    )
+                }
             }
-            items(state.transcripts, key = { it.id }) { transcript ->
+            item { MicSection(state, onMic) }
+            if (history.isNotEmpty()) {
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Recent dictations", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                        TextButton(onClick = viewModel::clearHistory) { Text("Clear") }
+                    }
+                }
+            }
+            items(history, key = { it.id }) { transcript ->
                 TranscriptCard(transcript, onCopy = { clipboard.setText(AnnotatedString(transcript.text)) })
             }
         }
@@ -203,8 +232,8 @@ private fun ModelCard(
                     Hint("This takes a minute or two. Keep the app open.")
                 }
 
-                is ModelState.Loading -> {
-                    Text("Loading ${displayName(model.name)}…")
+                ModelState.Loading -> {
+                    Text("Loading the speech model…")
                     LinearProgressIndicator(Modifier.fillMaxWidth())
                 }
 
@@ -233,6 +262,55 @@ private fun ModelCard(
                     Button(onClick = onImport, modifier = Modifier.fillMaxWidth()) { Text("Import a model file") }
                     OutlinedButton(onClick = onDownload, modifier = Modifier.fillMaxWidth()) { Text("Download the model") }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BubbleCard(
+    setup: SetupState,
+    onAllowMic: () -> Unit,
+    onOpenAccessibility: () -> Unit,
+    onOpenAppInfo: () -> Unit,
+) {
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (setup.bubbleEnabled) {
+                Text("Floating bubble is on", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Start typing in any app and a mic bubble appears above the keyboard. " +
+                        "Tap it, speak, then tap again. Drag it to move it.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (!setup.micGranted) {
+                    Text("The bubble needs microphone access.", color = MaterialTheme.colorScheme.error)
+                    Button(onClick = onAllowMic, modifier = Modifier.fillMaxWidth()) { Text("Allow microphone") }
+                }
+                TextButton(onClick = onOpenAccessibility) { Text("Turn off in accessibility settings") }
+            } else {
+                Text("Turn on the floating bubble", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "It puts a mic button above your keyboard in any app, so you can dictate straight into the text box.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Hint(
+                    "Android calls this an accessibility service and asks you to confirm, because it can see the " +
+                        "screen. Transcribe only looks at the text box you're typing in, and it has no internet " +
+                        "access, so nothing can leave the phone.",
+                )
+                if (!setup.micGranted) {
+                    Button(onClick = onAllowMic, modifier = Modifier.fillMaxWidth()) { Text("1. Allow microphone") }
+                }
+                Button(onClick = onOpenAccessibility, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (setup.micGranted) "Turn on the bubble" else "2. Turn on the bubble")
+                }
+                Hint("Find Transcribe in the list (it may be under Downloaded apps) and switch it on.")
+                Hint(
+                    "If the switch is greyed out or says \"Restricted setting\": open App info, tap ⋮ in the top " +
+                        "corner, choose Allow restricted settings, then try again.",
+                )
+                OutlinedButton(onClick = onOpenAppInfo, modifier = Modifier.fillMaxWidth()) { Text("Open App info") }
             }
         }
     }
@@ -294,7 +372,7 @@ private fun MicSection(state: UiState, onMic: () -> Unit) {
                 !ready -> "Set up the speech model to start"
                 recorder is RecorderState.Recording -> "${formatDuration(recorder.seconds)}  ·  tap to stop"
                 recorder == RecorderState.Transcribing -> "Transcribing…"
-                else -> "Tap to dictate"
+                else -> "Try it here: tap to dictate"
             },
             style = MaterialTheme.typography.bodyLarge,
         )
@@ -307,17 +385,9 @@ private fun TranscriptCard(transcript: Transcript, onCopy: () -> Unit) {
         Column(Modifier.padding(start = 16.dp, top = 8.dp, end = 4.dp, bottom = 12.dp)) {
             Row(verticalAlignment = Alignment.Top) {
                 SelectionContainer(Modifier.weight(1f).padding(top = 12.dp)) {
-                    if (transcript.text.isBlank()) {
-                        Text(
-                            "(No speech detected)",
-                            fontStyle = FontStyle.Italic,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    } else {
-                        Text(transcript.text, style = MaterialTheme.typography.bodyLarge)
-                    }
+                    Text(transcript.text, style = MaterialTheme.typography.bodyLarge)
                 }
-                IconButton(onClick = onCopy, enabled = transcript.text.isNotBlank()) {
+                IconButton(onClick = onCopy) {
                     Icon(painterResource(R.drawable.ic_copy), contentDescription = "Copy")
                 }
             }
@@ -345,12 +415,25 @@ private fun formatDuration(seconds: Float): String {
 
 private fun statsLine(t: Transcript): String {
     val processSeconds = t.processMillis / 1000f
-    val speed = if (t.processMillis > 0) "  ·  %.0f× faster than real time".format(t.audioSeconds / processSeconds) else ""
-    return "%.1f s of speech → %.2f s to transcribe%s".format(t.audioSeconds, processSeconds, speed)
+    val speed = if (t.processMillis > 0) "  ·  %.0f× real time".format(t.audioSeconds / processSeconds) else ""
+    val time = DateUtils.getRelativeTimeSpanString(t.createdAt)
+    return "$time  ·  %.1f s → %.2f s%s".format(t.audioSeconds, processSeconds, speed)
 }
 
-private fun openAppSettings(context: Context) {
+private fun openAppInfo(context: Context) {
     context.startActivity(
         Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
     )
+}
+
+/** Opens Transcribe's own page in accessibility settings, or the general list if that's not allowed. */
+private fun openBubbleSettings(context: Context) {
+    val component = ComponentName(context, DictationService::class.java).flattenToString()
+    val details = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
+        .putExtra(Intent.EXTRA_COMPONENT_NAME, component)
+    try {
+        context.startActivity(details)
+    } catch (e: Exception) {
+        context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+    }
 }

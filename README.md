@@ -6,8 +6,9 @@ internet permission, so Android itself guarantees your audio and text can't leav
 It uses NVIDIA's open [Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) speech
 model through [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx).
 
-**Status:** phase 1, a test app: tap the mic, talk, tap again and get the text. The floating
-bubble that types into any app comes in phase 2. See [docs/PLAN.md](docs/PLAN.md).
+**Status:** phase 2. A floating mic bubble appears above your keyboard (Gboard or any other)
+in any app: tap it, speak, tap again, and the text is typed into the text box. See
+[docs/PLAN.md](docs/PLAN.md) for what's next.
 
 ## Install on your phone
 
@@ -20,9 +21,24 @@ bubble that types into any app comes in phase 2. See [docs/PLAN.md](docs/PLAN.md
       (`sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.tar.bz2`, several hundred MB).
    2. **Import the downloaded file.** Pick it from Downloads. Unpacking takes a minute or
       two, and you can delete the download afterwards.
-4. Tap the mic and talk.
+4. Turn on the floating bubble from the app's **Turn on the bubble** card:
+   1. Allow microphone access.
+   2. Switch on **Transcribe** in Android's accessibility settings (it may be under
+      *Downloaded apps*). If the switch is greyed out or says *Restricted setting*, open
+      **App info → ⋮ → Allow restricted settings** and try again. Android requires this
+      extra step for accessibility services in apps installed outside the Play Store.
+5. Tap into any text box. The bubble appears above the keyboard. Tap it, speak, tap again.
+   Drag the bubble to move it.
 
-Later builds install over the top; the model stays put.
+Later builds install over the top; the model and settings stay put.
+
+### Why an accessibility service?
+
+It's the only way Android lets an app notice you're typing in another app and put text
+into that app's text box. Wispr Flow's Android app uses the same approach. Transcribe only
+looks at the focused text box and the keyboard's position, skips password fields, and has no
+internet access. Recent dictations are kept on the phone (in the app) so nothing is lost if
+inserting fails, and you can clear them anytime.
 
 ### Other models
 
@@ -32,10 +48,13 @@ covers 25 European languages. Use **Replace model** in the app.
 
 ## How it's built
 
-- `core/`: plain Kotlin logic (model unpacking, audio helpers) with unit tests that run on
-  any computer: `./gradlew :core:test`.
-- `app/`: the Android app (Jetpack Compose). `./gradlew :app:assembleRelease` builds the APK.
-  The sherpa-onnx library is downloaded from its GitHub release at build time.
+- `core/`: plain Kotlin logic (model unpacking, audio helpers, spacing when inserting text)
+  with unit tests that run on any computer: `./gradlew :core:test`.
+- `app/`: the Android app. `./gradlew :app:assembleRelease` builds the APK. The sherpa-onnx
+  library is downloaded from its GitHub release at build time.
+  - `bubble/`: the accessibility service, the overlay bubble, and text insertion.
+  - `speech/SpeechEngine`: loads the model on first use (shared by the bubble and the app
+    screen) and frees its memory after 10 idle minutes.
 - `.github/workflows/build.yml`: every push builds the APK on GitHub, fails the build if the
   APK requests any network permission, and (on pushes) updates the **Latest build** release.
 

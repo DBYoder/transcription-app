@@ -15,6 +15,15 @@ import kotlinx.coroutines.launch
 import kotlin.math.max
 
 /**
+ * Longest single dictation. Parakeet handles a whole clip at once, and very long clips use a
+ * lot of memory; chunking with voice detection (phase 3) will lift this.
+ */
+const val MAX_RECORDING_SECONDS = 180
+
+/** Anything shorter is treated as an accidental tap. */
+const val MIN_RECORDING_SECONDS = 0.3f
+
+/**
  * Records 16 kHz mono audio from the microphone into memory.
  *
  * Call [start], then [stop] to get the samples. Not thread-safe: call both from the same

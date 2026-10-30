@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Transcribe</string>
+
+    <string name="bubble_service_label">Transcribe dictation bubble</string>
+    <string name="bubble_service_summary">A mic bubble above your keyboard for on-device dictation</string>
+    <string name="bubble_service_description">Shows a mic bubble above the keyboard while you\'re typing in any app. Tap it, speak, and tap again: your words are transcribed on this phone and typed into the text box.\n\nTo do that, Transcribe looks at which text box you\'re typing in and where the keyboard is. It doesn\'t store or send anything from your screen. The app has no internet access.</string>
 </resources>

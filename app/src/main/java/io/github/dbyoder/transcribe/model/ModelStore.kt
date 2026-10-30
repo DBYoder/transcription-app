@@ -20,6 +20,9 @@ class ModelStore(private val context: Context) {
         ModelInstaller.load(modelDir)
     }
 
+    /** Quick check (reads one small file) for whether a model has been imported. */
+    fun hasModel(): Boolean = ModelInstaller.load(modelDir) != null
+
     /**
      * Unpacks the model archive the user picked (it's in their Downloads folder, fetched
      * by their browser, since this app has no internet access).
