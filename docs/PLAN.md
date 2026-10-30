@@ -15,7 +15,7 @@ Goal: a Wispr Flow-style dictation tool for a Pixel 10a (Tensor G4, 8 GB RAM) th
 |---|---|---|
 | Speech to text | NVIDIA Parakeet TDT 0.6B (int8) via sherpa-onnx | Adds punctuation and capitals itself; ~1 s for a typical sentence on a recent phone |
 | Floating bubble + inserting text | Android accessibility service | Same approach as Wispr Flow on Android. Draws the bubble without the "display over other apps" permission. Skips password fields. Pasting puts the dictation on the clipboard too |
-| Tidy-up | Filler-word filter first; small on-device LLM later (optional) | Gemini Nano doesn't appear to be offered to apps on the 10a, so we'd bundle a ~1B model |
+| Tidy-up and formatting | Instant rule-based filter, plus optional on-device AI buttons | Gemini Nano doesn't appear to be offered to apps on the 10a, so the user imports Gemma 4 E2B |
 | Model delivery | User downloads the model in the browser and imports it | The app has **no internet permission**; CI enforces this |
 | Install | GitHub Actions builds a signed APK on every push | One stable link: Releases → Latest build |
 
@@ -37,18 +37,16 @@ Goal: a Wispr Flow-style dictation tool for a Pixel 10a (Tensor G4, 8 GB RAM) th
    um/uh/hmm with the punctuation around them, collapses stutters ("I I think"), drops
    comma-wrapped fillers (", you know,", ", like,"), and turns a spoken "new line" / "new
    paragraph" into line breaks. On by default; the original is kept in history.
-4. **AI polish and reformatting** (next): a small instruction-tuned model running on the
-   phone's GPU via Google's LiteRT-LM (published figures for Gemma 3 1B on a recent flagship:
-   1,000+ tokens/s to read, 25–45 tokens/s to write, so roughly 2–4 s for a typical dictation).
-   - *Polish* toggle: handles what rules can't — self-corrections ("Tuesday, no wait,
-     Wednesday" → "Wednesday"), grammar, punctuation, paragraphs, and turning spoken lists into
-     bullet points.
-   - *Reformat* one-tap actions on a dictation: bullet list, email, shorter, more formal,
-     friendlier.
-   - Later, *command mode*: select text, tap the bubble, and say what to do with it ("make this
-     a bulleted list").
-   - Model choice (Gemma 3 1B vs. Qwen ~1.5B) to be settled by benchmarking on the phone.
-     It's a second, optional download (~0.5–1 GB) imported the same way as the speech model.
+4. **AI formatting buttons** (built, awaiting on-phone testing): Polish, Bullets, Email and
+   Shorter. They appear beside the bubble for a few seconds after a dictation and rewrite
+   what was just typed in place (with Undo); the same buttons are on every dictation in the
+   app, where the result is added to history and copied. Runs Google's Gemma 4 E2B
+   (`litert-community/gemma-4-E2B-it-litert-lm`, ~2.6 GB, Apache 2.0) through LiteRT-LM on
+   the GPU, falling back to the CPU. Imported like the speech model (the app still has no
+   internet access). Loads on first use, unloads after 5 idle minutes; pre-loads after a
+   dictation only if a button was used in the last day.
+   - Next: *command mode* (select text, tap the bubble, say what to do with it) and
+     per-app defaults (e.g. always offer Email first in Gmail).
 5. **Polish the bubble**: hold-to-talk, settings, and voice activity detection so long
    dictations transcribe in chunks while you talk (keeping the wait short and removing the
    3-minute limit).

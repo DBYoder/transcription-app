@@ -2,14 +2,19 @@ package io.github.dbyoder.transcribe
 
 import android.Manifest
 import android.app.Application
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.dbyoder.transcribe.ai.FormatModelStore
+import io.github.dbyoder.transcribe.ai.Formatter
 import io.github.dbyoder.transcribe.audio.AudioRecorder
 import io.github.dbyoder.transcribe.audio.MAX_RECORDING_SECONDS
 import io.github.dbyoder.transcribe.audio.MIN_RECORDING_SECONDS
 import io.github.dbyoder.transcribe.bubble.DictationService
+import io.github.dbyoder.transcribe.core.FormatStyle
 import io.github.dbyoder.transcribe.core.SAMPLE_RATE
 import io.github.dbyoder.transcribe.history.Transcript
 import io.github.dbyoder.transcribe.history.TranscriptHistory
@@ -17,12 +22,14 @@ import io.github.dbyoder.transcribe.model.ModelStore
 import io.github.dbyoder.transcribe.speech.SpeechEngine
 import io.github.dbyoder.transcribe.speech.TextPipeline
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 import kotlin.system.measureTimeMillis
 
@@ -43,6 +50,15 @@ sealed interface RecorderState {
     data object Transcribing : RecorderState
 }
 
+/** The optional AI model behind the formatting buttons. */
+sealed interface AiModelState {
+    data object Missing : AiModelState
+
+    /** @param fraction 0..1, or null when the file size is unknown. */
+    data class Installing(val fraction: Float?) : AiModelState
+    data class Ready(val name: String) : AiModelState
+}
+
 /** What's still needed for the floating bubble to work. */
 data class SetupState(
     val micGranted: Boolean = false,
@@ -57,12 +73,17 @@ data class UiState(
     val threads: Int = DEFAULT_THREADS,
     val cleanUp: Boolean = true,
     val setup: SetupState = SetupState(),
+    val ai: AiModelState = AiModelState.Missing,
+    /** The history item an AI formatting button is working on, if any. */
+    val formattingId: Long? = null,
     /** A one-off notice for the snackbar; cleared with [MainViewModel.messageShown]. */
     val message: String? = null,
 )
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val store = ModelStore(app)
+    private val aiStore = FormatModelStore(app)
+    private var aiImportJob: Job? = null
     private val recorder = AudioRecorder(MAX_RECORDING_SECONDS)
     private var importJob: Job? = null
 
@@ -76,6 +97,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         refreshSetup()
+        refreshAi()
         viewModelScope.launch { loadModel() }
     }
 
@@ -209,6 +231,63 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // --- Misc -----------------------------------------------------------------------------
+
+    // --- AI formatting ----------------------------------------------------------------------
+
+    private fun refreshAi() {
+        val ai = if (aiStore.installed() != null) AiModelState.Ready(aiStore.installedName() ?: "AI model") else AiModelState.Missing
+        _state.update { it.copy(ai = ai) }
+    }
+
+    fun importAiModel(uri: Uri) {
+        if (aiImportJob?.isActive == true || _state.value.formattingId != null) return
+        aiImportJob = viewModelScope.launch {
+            _state.update { it.copy(ai = AiModelState.Installing(null)) }
+            try {
+                Formatter.unload()
+                aiStore.import(uri) { fraction -> _state.update { it.copy(ai = AiModelState.Installing(fraction)) } }
+                _state.update { it.copy(message = "AI model ready. The formatting buttons are on.") }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(message = e.message ?: "Couldn't import that file") }
+            }
+            refreshAi()
+        }
+    }
+
+    fun removeAiModel() {
+        if (_state.value.formattingId != null) return
+        viewModelScope.launch {
+            Formatter.unload()
+            withContext(Dispatchers.IO) { aiStore.remove() }
+            refreshAi()
+        }
+    }
+
+    /** Rewrites a saved dictation with an AI formatting button; the result is added and copied. */
+    fun format(transcript: Transcript, style: FormatStyle) {
+        if (_state.value.formattingId != null || _state.value.ai !is AiModelState.Ready) return
+        _state.update { it.copy(formattingId = transcript.id) }
+        viewModelScope.launch {
+            try {
+                var formatted = ""
+                val millis = measureTimeMillis { formatted = Formatter.format(transcript.text, style) }
+                val app = getApplication<Application>()
+                AppSettings.markFormatUsed(app)
+                TranscriptHistory.add(formatted, 0f, millis, original = transcript.text, style = style.label)
+                app.getSystemService(ClipboardManager::class.java)
+                    .setPrimaryClip(ClipData.newPlainText("Dictation", formatted))
+                _state.update { it.copy(message = "${style.label} version copied and added at the top") }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(message = "Formatting failed: ${e.message}") }
+            } finally {
+                _state.update { it.copy(formattingId = null) }
+            }
+        }
+    }
 
     fun setCleanUp(enabled: Boolean) {
         AppSettings.setCleanUp(getApplication<Application>(), enabled)

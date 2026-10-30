@@ -26,6 +26,8 @@ data class Transcript(
     val original: String? = null,
     /** How the bubble put the text into the app ("typed", "pasted", "copied: ..."); null for the app screen. */
     val insertedVia: String? = null,
+    /** The AI formatting button that produced this ("Email", "Bullets"...), or null for a dictation. */
+    val style: String? = null,
 )
 
 /**
@@ -56,6 +58,7 @@ object TranscriptHistory {
         processMillis: Long,
         original: String? = null,
         insertedVia: String? = null,
+        style: String? = null,
     ) {
         val item = Transcript(
             id = nextId.getAndIncrement(),
@@ -65,6 +68,7 @@ object TranscriptHistory {
             createdAt = System.currentTimeMillis(),
             original = original?.takeIf { it != text },
             insertedVia = insertedVia,
+            style = style,
         )
         _items.update { (listOf(item) + it).take(MAX_ITEMS) }
         persist()
@@ -99,6 +103,7 @@ object TranscriptHistory {
                     .apply {
                         if (t.original != null) put("original", t.original)
                         if (t.insertedVia != null) put("insertedVia", t.insertedVia)
+                        if (t.style != null) put("style", t.style)
                     },
             )
         }
@@ -117,6 +122,7 @@ object TranscriptHistory {
                 createdAt = o.getLong("createdAt"),
                 original = if (o.has("original")) o.getString("original") else null,
                 insertedVia = if (o.has("insertedVia")) o.getString("insertedVia") else null,
+                style = if (o.has("style")) o.getString("style") else null,
             )
         }
     }

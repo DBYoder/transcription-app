@@ -65,7 +65,7 @@ android {
         targetSdk = 35
         // CI run numbers only go up, so each build installs over the previous one.
         versionCode = providers.environmentVariable("GITHUB_RUN_NUMBER").orNull?.toIntOrNull() ?: 1
-        versionName = "0.3.1"
+        versionName = "0.4.0"
 
         // Pixel phones (and nearly all current Android phones) are 64-bit ARM.
         ndk { abiFilters += "arm64-v8a" }
@@ -133,4 +133,5 @@ dependencies {
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.material3)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.litertlm.android)
 }
