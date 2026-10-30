@@ -15,6 +15,7 @@ import io.github.dbyoder.transcribe.history.Transcript
 import io.github.dbyoder.transcribe.history.TranscriptHistory
 import io.github.dbyoder.transcribe.model.ModelStore
 import io.github.dbyoder.transcribe.speech.SpeechEngine
+import io.github.dbyoder.transcribe.speech.TextPipeline
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,6 +53,7 @@ data class UiState(
     val model: ModelState = ModelState.Checking,
     val recorder: RecorderState = RecorderState.Idle,
     val threads: Int = DEFAULT_THREADS,
+    val cleanUp: Boolean = true,
     val setup: SetupState = SetupState(),
     /** A one-off notice for the snackbar; cleared with [MainViewModel.messageShown]. */
     val message: String? = null,
@@ -62,7 +64,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val recorder = AudioRecorder(MAX_RECORDING_SECONDS)
     private var importJob: Job? = null
 
-    private val _state = MutableStateFlow(UiState(threads = AppSettings.threads(app)))
+    private val _state = MutableStateFlow(
+        UiState(threads = AppSettings.threads(app), cleanUp = AppSettings.cleanUp(app)),
+    )
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     /** Recent dictations from both the bubble and the button on this screen. */
@@ -184,12 +188,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         try {
-            var text = ""
-            val millis = measureTimeMillis { text = SpeechEngine.transcribe(samples) }
+            var raw = ""
+            val millis = measureTimeMillis { raw = SpeechEngine.transcribe(samples) }
+            val text = TextPipeline.process(getApplication<Application>(), raw)
             if (text.isBlank()) {
                 _state.update { it.copy(message = "No speech detected") }
             } else {
-                TranscriptHistory.add(text, seconds, millis)
+                TranscriptHistory.add(text, seconds, millis, original = raw)
             }
         } catch (e: CancellationException) {
             throw e
@@ -201,6 +206,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // --- Misc -----------------------------------------------------------------------------
+
+    fun setCleanUp(enabled: Boolean) {
+        AppSettings.setCleanUp(getApplication<Application>(), enabled)
+        _state.update { it.copy(cleanUp = enabled) }
+    }
 
     fun clearHistory() = TranscriptHistory.clear()
 

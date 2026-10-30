@@ -29,11 +29,25 @@ Goal: a Wispr Flow-style dictation tool for a Pixel 10a (Tensor G4, 8 GB RAM) th
    foreground capabilities, so no foreground service or notification is needed); inserts at
    the cursor (paste, falling back to set-text, then clipboard); saved history of recent
    dictations; the model loads on first use and unloads after 10 idle minutes.
-3. **Polish**: filler-word removal, hold-to-talk, drag to reposition, settings, and voice
-   activity detection so long dictations transcribe in chunks while you talk (keeping the wait
-   short and removing the 3-minute limit).
-4. **Optional AI tidy-up**: a small on-device model (e.g. Gemma ~1B), benchmarked on the
-   phone and offered as a toggle.
+3. **Instant tidy-up** (done): rule-based, no AI, no delay (`core/TextCleaner`). Removes
+   um/uh/hmm with the punctuation around them, collapses stutters ("I I think"), drops
+   comma-wrapped fillers (", you know,", ", like,"), and turns a spoken "new line" / "new
+   paragraph" into line breaks. On by default; the original is kept in history.
+4. **AI polish and reformatting** (next): a small instruction-tuned model running on the
+   phone's GPU via Google's LiteRT-LM (published figures for Gemma 3 1B on a recent flagship:
+   1,000+ tokens/s to read, 25–45 tokens/s to write, so roughly 2–4 s for a typical dictation).
+   - *Polish* toggle: handles what rules can't — self-corrections ("Tuesday, no wait,
+     Wednesday" → "Wednesday"), grammar, punctuation, paragraphs, and turning spoken lists into
+     bullet points.
+   - *Reformat* one-tap actions on a dictation: bullet list, email, shorter, more formal,
+     friendlier.
+   - Later, *command mode*: select text, tap the bubble, and say what to do with it ("make this
+     a bulleted list").
+   - Model choice (Gemma 3 1B vs. Qwen ~1.5B) to be settled by benchmarking on the phone.
+     It's a second, optional download (~0.5–1 GB) imported the same way as the speech model.
+5. **Polish the bubble**: hold-to-talk, settings, and voice activity detection so long
+   dictations transcribe in chunks while you talk (keeping the wait short and removing the
+   3-minute limit).
 
 ## Known caveats
 
