@@ -18,10 +18,14 @@ enum class FormatStyle(val label: String, val instruction: String) {
     ),
     EMAIL(
         "Email",
-        "Turn the dictated text into a clear, professional work email body. Start with a greeting if a " +
-            "recipient is mentioned. Use short paragraphs, and put lists, steps or action items in bullets " +
-            "that start with \"- \". End with a brief closing line. Keep names, numbers and dates exactly " +
-            "as given. Don't invent details, and don't write a subject line or a signature.",
+        "Lay out the dictated text as an email body, written in the speaker's own voice. Keep their " +
+            "words, phrasing and level of formality: only fix grammar and punctuation, remove filler words " +
+            "and false starts, and organize it into short paragraphs, with lists, steps or action items as " +
+            "bullets that start with \"- \". If they name the person they're writing to, start with " +
+            "\"Hi <name>,\". End with a short sign-off such as \"Thanks,\" only if it fits what they said. " +
+            "Don't make it more formal, and don't add phrases they didn't say (such as \"I hope this email " +
+            "finds you well\" or \"Please let me know if you have any questions\"). Keep names, numbers and " +
+            "dates exactly as given. No subject line or signature.",
     ),
     SHORTER(
         "Shorter",
@@ -32,7 +36,8 @@ enum class FormatStyle(val label: String, val instruction: String) {
 
     companion object {
         const val SYSTEM_INSTRUCTION =
-            "You edit text that someone dictated by voice. Reply with only the edited text: no " +
+            "You edit text that someone dictated by voice. It should still sound like them: keep their " +
+                "own words, phrasing and tone unless asked otherwise. Reply with only the edited text: no " +
                 "introduction, explanation, quotation marks or headings."
 
         /** The message sent to the model for [text]. */

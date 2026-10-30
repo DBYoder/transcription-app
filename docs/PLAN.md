@@ -37,7 +37,8 @@ Goal: a Wispr Flow-style dictation tool for a Pixel 10a (Tensor G4, 8 GB RAM) th
    um/uh/hmm with the punctuation around them, collapses stutters ("I I think"), drops
    comma-wrapped fillers (", you know,", ", like,"), and turns a spoken "new line" / "new
    paragraph" into line breaks. On by default; the original is kept in history.
-4. **AI formatting buttons** (built, awaiting on-phone testing): Polish, Bullets, Email and
+4. **AI formatting buttons** (done; tested on the Pixel 10a: Polish and Bullets work well,
+   speed is good, in-place replacement works; Email was reworded to keep the speaker's voice): Polish, Bullets, Email and
    Shorter. They appear beside the bubble for a few seconds after a dictation and rewrite
    what was just typed in place (with Undo); the same buttons are on every dictation in the
    app, where the result is added to history and copied. Runs Google's Gemma 4 E2B
