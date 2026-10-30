@@ -6,9 +6,10 @@ internet permission, so Android itself guarantees your audio and text can't leav
 It uses NVIDIA's open [Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) speech
 model through [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx).
 
-**Status:** phase 2. A floating mic bubble appears above your keyboard (Gboard or any other)
-in any app: tap it, speak, tap again, and the text is typed into the text box. See
-[docs/PLAN.md](docs/PLAN.md) for what's next.
+**Status:** a floating mic bubble appears above your keyboard (Gboard or any other)
+in any app: tap it, speak, tap again, and the text is typed into the text box. Dictation is
+tidied up instantly (no AI): "um"s and stutters removed, and a spoken "new paragraph" becomes
+a line break. On-device AI polishing and reformatting is next; see [docs/PLAN.md](docs/PLAN.md).
 
 ## Install on your phone
 

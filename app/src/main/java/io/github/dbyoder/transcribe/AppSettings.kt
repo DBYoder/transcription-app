@@ -10,6 +10,7 @@ object AppSettings {
     private const val KEY_THREADS = "threads"
     private const val KEY_BUBBLE_LEFT = "bubble_left"
     private const val KEY_BUBBLE_OFFSET_DP = "bubble_offset_dp"
+    private const val KEY_CLEAN_UP = "clean_up"
 
     /** How far the bubble's bottom sits above the top of the keyboard, by default. */
     const val DEFAULT_BUBBLE_OFFSET_DP = 96f
@@ -21,6 +22,13 @@ object AppSettings {
 
     fun setThreads(context: Context, threads: Int) {
         prefs(context).edit().putInt(KEY_THREADS, threads).apply()
+    }
+
+    /** Remove filler words and stutters, and turn "new paragraph" into a line break. */
+    fun cleanUp(context: Context): Boolean = prefs(context).getBoolean(KEY_CLEAN_UP, true)
+
+    fun setCleanUp(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_CLEAN_UP, enabled).apply()
     }
 
     fun bubbleOnLeft(context: Context): Boolean = prefs(context).getBoolean(KEY_BUBBLE_LEFT, false)

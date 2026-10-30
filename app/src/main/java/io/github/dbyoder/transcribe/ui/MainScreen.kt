@@ -42,6 +42,7 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -161,6 +162,7 @@ fun MainScreen(viewModel: MainViewModel) {
                         onOpenAppInfo = { openAppInfo(context) },
                     )
                 }
+                item { CleanUpCard(enabled = state.cleanUp, onChange = viewModel::setCleanUp) }
             }
             item { MicSection(state, onMic) }
             if (history.isNotEmpty()) {
@@ -317,6 +319,26 @@ private fun BubbleCard(
 }
 
 @Composable
+private fun CleanUpCard(enabled: Boolean, onChange: (Boolean) -> Unit) {
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Tidy up dictation", style = MaterialTheme.typography.titleMedium)
+                Hint(
+                    "Removes um, uh and stutters, drops fillers like \", you know,\", and turns a spoken " +
+                        "\"new line\" or \"new paragraph\" into a line break. Instant, no AI.",
+                )
+            }
+            Switch(checked = enabled, onCheckedChange = onChange)
+        }
+    }
+}
+
+@Composable
 private fun MicSection(state: UiState, onMic: () -> Unit) {
     val ready = state.model is ModelState.Ready
     val recorder = state.recorder
@@ -390,6 +412,15 @@ private fun TranscriptCard(transcript: Transcript, onCopy: () -> Unit) {
                 IconButton(onClick = onCopy) {
                     Icon(painterResource(R.drawable.ic_copy), contentDescription = "Copy")
                 }
+            }
+            val original = transcript.original
+            if (original != null) {
+                Text(
+                    "Before tidy-up: $original",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(end = 12.dp, bottom = 4.dp),
+                )
             }
             Text(
                 statsLine(transcript),

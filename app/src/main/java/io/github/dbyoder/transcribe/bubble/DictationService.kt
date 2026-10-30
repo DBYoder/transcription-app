@@ -24,6 +24,7 @@ import io.github.dbyoder.transcribe.core.SAMPLE_RATE
 import io.github.dbyoder.transcribe.history.TranscriptHistory
 import io.github.dbyoder.transcribe.model.ModelStore
 import io.github.dbyoder.transcribe.speech.SpeechEngine
+import io.github.dbyoder.transcribe.speech.TextPipeline
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
@@ -168,12 +169,13 @@ class DictationService : AccessibilityService() {
                 // Android feeds silence (exact zeros) to apps it won't let use the mic.
                 samples.all { it == 0f } -> reject("Android didn't let Transcribe hear the microphone")
                 else -> {
-                    var text = ""
-                    val millis = measureTimeMillis { text = SpeechEngine.transcribe(samples) }
+                    var raw = ""
+                    val millis = measureTimeMillis { raw = SpeechEngine.transcribe(samples) }
+                    val text = TextPipeline.process(this, raw)
                     if (text.isBlank()) {
                         toast("No speech detected")
                     } else {
-                        TranscriptHistory.add(text, seconds, millis)
+                        TranscriptHistory.add(text, seconds, millis, original = raw)
                         if (TextInserter.insert(this, text) == TextInserter.Result.COPIED) {
                             toast("Copied. Long-press a text box and tap Paste.")
                         }
