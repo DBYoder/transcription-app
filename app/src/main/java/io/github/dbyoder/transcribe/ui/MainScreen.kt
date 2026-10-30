@@ -507,7 +507,7 @@ private fun FormatCard(
                 AiModelState.Missing -> {
                     Text("AI formatting (optional)", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "Adds Polish, Bullets, Email and Shorter buttons, next to the bubble right after you " +
+                        "Adds Polish, Bullets, Email, Shorter and Prompt buttons, next to the bubble right after you " +
                             "dictate and on each dictation below. It uses Google's Gemma 4 model, which runs on " +
                             "this phone like everything else. It's a one-time 2.6 GB download, and each tap " +
                             "takes a few seconds.",
@@ -534,7 +534,7 @@ private fun FormatCard(
                 is AiModelState.Ready -> {
                     Text("AI formatting is on", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "After you dictate with the bubble, tap Polish, Bullets, Email or Shorter next to it to " +
+                        "After you dictate with the bubble, tap Polish, Bullets, Email, Shorter or Prompt next to it to " +
                             "rewrite what you just said (Undo puts it back). The same buttons are on each " +
                             "dictation below. The first tap takes longer while the model loads.",
                         style = MaterialTheme.typography.bodyMedium,

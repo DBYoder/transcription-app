@@ -43,6 +43,24 @@ class FormatOutputTest {
     }
 
     @Test
+    fun promptRepliesKeepMarkdownBulletsAndSectionLabels() {
+        val reply = "Here's the prompt:\nWrite a short product update for my team.\n\n**Context:** we shipped the new " +
+            "search page.\n\nRequirements:\n* Under 150 words\n• Friendly tone\n\nOutput: plain text."
+        assertEquals(
+            "Write a short product update for my team.\n\nContext: we shipped the new search page.\n\n" +
+                "Requirements:\n- Under 150 words\n- Friendly tone\n\nOutput: plain text.",
+            FormatOutput.clean(reply, FormatStyle.PROMPT.bullet),
+        )
+    }
+
+    @Test
+    fun everyStyleButPromptUsesPlainBullets() {
+        for (style in FormatStyle.entries) {
+            assertEquals(if (style == FormatStyle.PROMPT) "- " else "• ", style.bullet, style.name)
+        }
+    }
+
+    @Test
     fun collapsesExtraBlankLines() {
         assertEquals("One.\n\nTwo.", FormatOutput.clean("One.\n\n\n\nTwo."))
     }
