@@ -4,6 +4,7 @@ import android.app.Application
 import io.github.dbyoder.transcribe.ai.Formatter
 import io.github.dbyoder.transcribe.history.TranscriptHistory
 import io.github.dbyoder.transcribe.speech.SpeechEngine
+import io.github.dbyoder.transcribe.vocab.UserVocabulary
 
 class TranscribeApp : Application() {
     override fun onCreate() {
@@ -11,5 +12,6 @@ class TranscribeApp : Application() {
         SpeechEngine.init(this)
         Formatter.init(this)
         TranscriptHistory.init(this)
+        UserVocabulary.init(this)
     }
 }

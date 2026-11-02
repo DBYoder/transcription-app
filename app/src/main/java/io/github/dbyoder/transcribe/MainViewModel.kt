@@ -14,13 +14,17 @@ import io.github.dbyoder.transcribe.audio.AudioRecorder
 import io.github.dbyoder.transcribe.audio.MAX_RECORDING_SECONDS
 import io.github.dbyoder.transcribe.audio.MIN_RECORDING_SECONDS
 import io.github.dbyoder.transcribe.bubble.DictationService
+import io.github.dbyoder.transcribe.core.DictionaryEntry
 import io.github.dbyoder.transcribe.core.FormatStyle
+import io.github.dbyoder.transcribe.core.PersonalDictionary
+import io.github.dbyoder.transcribe.core.Snippet
 import io.github.dbyoder.transcribe.history.Transcript
 import io.github.dbyoder.transcribe.history.TranscriptHistory
 import io.github.dbyoder.transcribe.model.ModelStore
 import io.github.dbyoder.transcribe.speech.LiveTranscription
 import io.github.dbyoder.transcribe.speech.SpeechEngine
 import io.github.dbyoder.transcribe.speech.TextPipeline
+import io.github.dbyoder.transcribe.vocab.UserVocabulary
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -76,6 +80,10 @@ data class UiState(
     val bubbleStyles: Set<FormatStyle> = FormatStyle.entries.toSet(),
     /** Select text, tap the bubble and say what to do with it. */
     val commandMode: Boolean = true,
+    /** Run Polish on every bubble dictation. */
+    val autoPolish: Boolean = false,
+    /** Have the speech model listen out for dictionary words. */
+    val boostWords: Boolean = true,
     val setup: SetupState = SetupState(),
     val ai: AiModelState = AiModelState.Missing,
     /** The history item an AI formatting button is working on, if any. */
@@ -98,9 +106,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             cleanUp = AppSettings.cleanUp(app),
             bubbleStyles = AppSettings.bubbleStyles(app).toSet(),
             commandMode = AppSettings.commandMode(app),
+            autoPolish = AppSettings.autoPolish(app),
+            boostWords = AppSettings.boostWords(app),
         ),
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
+
+    /** Your words, spelled your way. */
+    val words: StateFlow<List<DictionaryEntry>> = UserVocabulary.words
+
+    /** Text you insert by voice. */
+    val snippets: StateFlow<List<Snippet>> = UserVocabulary.snippets
 
     /** Recent dictations from both the bubble and the button on this screen. */
     val history: StateFlow<List<Transcript>> = TranscriptHistory.items
@@ -230,7 +246,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         try {
             val result = transcription.finish()
-            val text = TextPipeline.process(getApplication<Application>(), result.text)
+            // "Send" and "scratch that" only mean something in another app's text box.
+            val text = TextPipeline.process(getApplication<Application>(), result.text).text
             if (text.isBlank()) {
                 _state.update { it.copy(message = "No speech detected") }
             } else {
@@ -324,6 +341,51 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun setCommandMode(enabled: Boolean) {
         AppSettings.setCommandMode(getApplication<Application>(), enabled)
         _state.update { it.copy(commandMode = enabled) }
+    }
+
+    fun setAutoPolish(enabled: Boolean) {
+        AppSettings.setAutoPolish(getApplication<Application>(), enabled)
+        _state.update { it.copy(autoPolish = enabled) }
+    }
+
+    fun setBoostWords(enabled: Boolean) {
+        AppSettings.setBoostWords(getApplication<Application>(), enabled)
+        _state.update { it.copy(boostWords = enabled) }
+        reloadSpeechInBackground()
+    }
+
+    /** @param heardAs what the app writes instead, comma-separated. */
+    fun addWord(word: String, heardAs: String) {
+        UserVocabulary.addWord(word, heardAs.split(',', ';'))
+        reloadSpeechInBackground()
+    }
+
+    fun removeWord(entry: DictionaryEntry) {
+        UserVocabulary.removeWord(entry)
+        reloadSpeechInBackground()
+    }
+
+    fun addSnippet(trigger: String, text: String) = UserVocabulary.addSnippet(trigger, text)
+
+    fun removeSnippet(snippet: Snippet) = UserVocabulary.removeSnippet(snippet)
+
+    /** "Fix a word": remember that [wrong] should be [right], and fix this dictation too. */
+    fun fixWord(transcript: Transcript, wrong: String, right: String) {
+        if (wrong.isBlank() || right.isBlank()) return
+        UserVocabulary.addWord(right, listOf(wrong))
+        val fixed = PersonalDictionary.apply(transcript.text, listOf(DictionaryEntry(right.trim(), listOf(wrong.trim()))))
+        TranscriptHistory.replaceText(transcript.id, fixed)
+        _state.update { it.copy(message = "Saved. \"${wrong.trim()}\" will be written \"${right.trim()}\" from now on.") }
+        reloadSpeechInBackground()
+    }
+
+    /**
+     * Turning word boosting on or off (or adding the first word) changes how the speech model is
+     * set up. Do that now rather than on the next dictation.
+     */
+    private fun reloadSpeechInBackground() {
+        if (_state.value.model !is ModelState.Ready) return
+        viewModelScope.launch { runCatching { SpeechEngine.ensureLoaded() } }
     }
 
     fun clearHistory() = TranscriptHistory.clear()

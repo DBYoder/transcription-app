@@ -75,6 +75,25 @@ Goal: a Wispr Flow-style dictation tool for a Pixel 10a (Tensor G4, 8 GB RAM) th
      the room's background level and your voice, so it adapts to noise. The limit is now 30
      minutes (a safety stop). History shows "N s wait" when it was much less than the work.
 
+6. **From competitor research** (done, awaiting on-phone testing; Wispr Flow, Superwhisper,
+   Willow, Typeless and Gboard compared):
+   - **Your words** (`core/PersonalDictionary`): names and terms spelled your way, with what the
+     speech model writes instead. Fixed after every dictation (whole words, any case; words with
+     unusual capitals like "iPhone" also get their capitals fixed). "Fix a word" on any
+     dictation in the app adds one. With words added, the speech model also *listens out* for
+     them (sherpa-onnx hotwords, via a small beam search, slightly slower; can be switched off).
+     That needs the model's word-piece list (bpe.vocab), which newer model downloads include and
+     older ones get rebuilt from tokens.txt (`core/BpeVocab`).
+   - **Snippets** (`core/Snippets`): "insert my email" anywhere, or just "my email" as the whole
+     dictation, types the saved text.
+   - **Voice commands** (`core/VoiceCommands`, part of the tidy-up): "scratch that" deletes the
+     sentence before it (said first, it takes back the previous dictation from the text box);
+     "<name> emoji" types the emoji; ending with "send" after a pause (or "press enter") sends
+     the message via the text box's own action, the app's Send button, or Enter.
+   - **Auto-polish** (AI card): runs Polish on every bubble dictation of 4 to 300 words before
+     typing it, which handles self-corrections like Wispr Flow does. Undo restores the exact
+     words; if the AI fails or its reply looks cut short, the dictation is typed as said.
+
 ## Known caveats
 
 - Android hides the accessibility switch for apps installed outside the Play Store until you
