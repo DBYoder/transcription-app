@@ -15,10 +15,10 @@ import io.github.dbyoder.transcribe.audio.MAX_RECORDING_SECONDS
 import io.github.dbyoder.transcribe.audio.MIN_RECORDING_SECONDS
 import io.github.dbyoder.transcribe.bubble.DictationService
 import io.github.dbyoder.transcribe.core.FormatStyle
-import io.github.dbyoder.transcribe.core.SAMPLE_RATE
 import io.github.dbyoder.transcribe.history.Transcript
 import io.github.dbyoder.transcribe.history.TranscriptHistory
 import io.github.dbyoder.transcribe.model.ModelStore
+import io.github.dbyoder.transcribe.speech.LiveTranscription
 import io.github.dbyoder.transcribe.speech.SpeechEngine
 import io.github.dbyoder.transcribe.speech.TextPipeline
 import kotlinx.coroutines.CancellationException
@@ -74,6 +74,8 @@ data class UiState(
     val cleanUp: Boolean = true,
     /** The AI formatting buttons that pop up beside the bubble. */
     val bubbleStyles: Set<FormatStyle> = FormatStyle.entries.toSet(),
+    /** Select text, tap the bubble and say what to do with it. */
+    val commandMode: Boolean = true,
     val setup: SetupState = SetupState(),
     val ai: AiModelState = AiModelState.Missing,
     /** The history item an AI formatting button is working on, if any. */
@@ -87,6 +89,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val aiStore = FormatModelStore(app)
     private var aiImportJob: Job? = null
     private val recorder = AudioRecorder(MAX_RECORDING_SECONDS)
+    private var live: LiveTranscription? = null
     private var importJob: Job? = null
 
     private val _state = MutableStateFlow(
@@ -94,6 +97,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             threads = AppSettings.threads(app),
             cleanUp = AppSettings.cleanUp(app),
             bubbleStyles = AppSettings.bubbleStyles(app).toSet(),
+            commandMode = AppSettings.commandMode(app),
         ),
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
@@ -189,9 +193,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun startRecording() {
         if (_state.value.model !is ModelState.Ready) return
         _state.update { it.copy(recorder = RecorderState.Recording(0f, 0f), message = null) }
+        val transcription = LiveTranscription(viewModelScope)
         try {
             recorder.start(
                 scope = viewModelScope,
+                onAudio = transcription::accept,
                 onProgress = { seconds, level ->
                     _state.update { s ->
                         if (s.recorder is RecorderState.Recording) s.copy(recorder = RecorderState.Recording(seconds, level)) else s
@@ -204,28 +210,37 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 },
             )
+            live = transcription
         } catch (e: Exception) {
+            transcription.cancel()
             _state.update { it.copy(recorder = RecorderState.Idle, message = e.message ?: "Couldn't start recording") }
         }
     }
 
     private suspend fun finishRecording() {
         if (_state.value.recorder !is RecorderState.Recording) return
+        val transcription = live ?: return
+        live = null
         _state.update { it.copy(recorder = RecorderState.Transcribing) }
-        val samples = recorder.stop()
-        val seconds = samples.size / SAMPLE_RATE.toFloat()
+        val seconds = recorder.stop()
         if (seconds < MIN_RECORDING_SECONDS) {
+            transcription.cancel()
             _state.update { it.copy(recorder = RecorderState.Idle, message = "That was too short. Tap, speak, then tap again.") }
             return
         }
         try {
-            var raw = ""
-            val millis = measureTimeMillis { raw = SpeechEngine.transcribe(samples) }
-            val text = TextPipeline.process(getApplication<Application>(), raw)
+            val result = transcription.finish()
+            val text = TextPipeline.process(getApplication<Application>(), result.text)
             if (text.isBlank()) {
                 _state.update { it.copy(message = "No speech detected") }
             } else {
-                TranscriptHistory.add(text, seconds, millis, original = raw)
+                TranscriptHistory.add(
+                    text,
+                    result.audioSeconds,
+                    result.computeMillis,
+                    original = result.text,
+                    waitMillis = result.waitMillis,
+                )
             }
         } catch (e: CancellationException) {
             throw e
@@ -306,6 +321,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(bubbleStyles = AppSettings.bubbleStyles(app).toSet()) }
     }
 
+    fun setCommandMode(enabled: Boolean) {
+        AppSettings.setCommandMode(getApplication<Application>(), enabled)
+        _state.update { it.copy(commandMode = enabled) }
+    }
+
     fun clearHistory() = TranscriptHistory.clear()
 
     fun showMessage(message: String) {
@@ -318,5 +338,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         recorder.cancel()
+        live?.cancel()
     }
 }

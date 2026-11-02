@@ -18,9 +18,17 @@ import kotlin.math.roundToInt
  * takes keyboard focus, so the text box you're typing in stays active.
  *
  * Position is remembered as a screen side plus a distance above the keyboard, so the bubble
- * follows the keyboard between apps. Drag it to move it.
+ * follows the keyboard between apps. Tap it, press and hold it (hold-to-talk), or drag it to
+ * move it.
  */
-class BubbleOverlay(private val context: Context, private val onTap: () -> Unit) {
+class BubbleOverlay(
+    private val context: Context,
+    private val onTap: () -> Unit,
+    /** The bubble has been held down long enough to count as hold-to-talk. */
+    private val onHoldStart: () -> Unit,
+    /** The finger came off (or the touch was cancelled) after [onHoldStart]. */
+    private val onHoldEnd: () -> Unit,
+) {
     private val windowManager = context.getSystemService(WindowManager::class.java)
     private val density = context.resources.displayMetrics.density
     private val sizePx = (64 * density).roundToInt()
@@ -109,11 +117,17 @@ class BubbleOverlay(private val context: Context, private val onTap: () -> Unit)
 
     private inner class DragHandler : View.OnTouchListener {
         private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+        private val holdDelay = ViewConfiguration.getLongPressTimeout().toLong()
         private var downX = 0f
         private var downY = 0f
         private var startX = 0
         private var startY = 0
         private var dragging = false
+        private var holding = false
+        private val startHolding = Runnable {
+            holding = true
+            onHoldStart()
+        }
 
         @SuppressLint("ClickableViewAccessibility") // taps go through performClick() below
         override fun onTouch(v: View, event: MotionEvent): Boolean {
@@ -124,12 +138,16 @@ class BubbleOverlay(private val context: Context, private val onTap: () -> Unit)
                     startX = params.x
                     startY = params.y
                     dragging = false
+                    holding = false
+                    v.postDelayed(startHolding, holdDelay)
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    if (holding) return true // talking: a wobbly finger shouldn't move the bubble
                     val dx = event.rawX - downX
                     val dy = event.rawY - downY
                     if (!dragging && hypot(dx, dy) > touchSlop) {
                         dragging = true
+                        v.removeCallbacks(startHolding)
                         onDragStart()
                     }
                     if (dragging && attached) {
@@ -139,14 +157,28 @@ class BubbleOverlay(private val context: Context, private val onTap: () -> Unit)
                     }
                 }
                 MotionEvent.ACTION_UP -> {
-                    if (dragging) {
-                        settle()
-                    } else {
-                        v.performClick()
-                        onTap()
+                    v.removeCallbacks(startHolding)
+                    when {
+                        holding -> {
+                            holding = false
+                            onHoldEnd()
+                        }
+                        dragging -> settle()
+                        else -> {
+                            v.performClick()
+                            onTap()
+                        }
                     }
                 }
-                MotionEvent.ACTION_CANCEL -> if (dragging) settle()
+                MotionEvent.ACTION_CANCEL -> {
+                    v.removeCallbacks(startHolding)
+                    if (holding) {
+                        holding = false
+                        onHoldEnd()
+                    } else if (dragging) {
+                        settle()
+                    }
+                }
             }
             return true
         }

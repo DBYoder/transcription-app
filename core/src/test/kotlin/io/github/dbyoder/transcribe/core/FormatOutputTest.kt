@@ -71,4 +71,11 @@ class FormatOutputTest {
         assertTrue(prompt.startsWith(FormatStyle.EMAIL.instruction))
         assertTrue(prompt.endsWith("\"\"\"\ntell sam the launch moved\n\"\"\""))
     }
+
+    @Test
+    fun commandPromptHasTheInstructionAndTheSelection() {
+        val prompt = EditCommand.prompt(" make it friendlier ", "\nSend the report by Friday.\n")
+        assertTrue(prompt.startsWith("Instruction: make it friendlier\n"), prompt)
+        assertTrue(prompt.endsWith("\"\"\"\nSend the report by Friday.\n\"\"\""), prompt)
+    }
 }

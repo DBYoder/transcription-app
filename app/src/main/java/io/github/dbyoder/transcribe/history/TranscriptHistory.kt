@@ -28,6 +28,11 @@ data class Transcript(
     val insertedVia: String? = null,
     /** The AI formatting button that produced this ("Email", "Bullets"...), or null for a dictation. */
     val style: String? = null,
+    /**
+     * How long you waited after stopping. Long dictations are transcribed while you talk, so
+     * this can be much less than [processMillis].
+     */
+    val waitMillis: Long? = null,
 )
 
 /**
@@ -59,6 +64,7 @@ object TranscriptHistory {
         original: String? = null,
         insertedVia: String? = null,
         style: String? = null,
+        waitMillis: Long? = null,
     ) {
         val item = Transcript(
             id = nextId.getAndIncrement(),
@@ -69,6 +75,7 @@ object TranscriptHistory {
             original = original?.takeIf { it != text },
             insertedVia = insertedVia,
             style = style,
+            waitMillis = waitMillis,
         )
         _items.update { (listOf(item) + it).take(MAX_ITEMS) }
         persist()
@@ -104,6 +111,7 @@ object TranscriptHistory {
                         if (t.original != null) put("original", t.original)
                         if (t.insertedVia != null) put("insertedVia", t.insertedVia)
                         if (t.style != null) put("style", t.style)
+                        if (t.waitMillis != null) put("waitMillis", t.waitMillis)
                     },
             )
         }
@@ -123,6 +131,7 @@ object TranscriptHistory {
                 original = if (o.has("original")) o.getString("original") else null,
                 insertedVia = if (o.has("insertedVia")) o.getString("insertedVia") else null,
                 style = if (o.has("style")) o.getString("style") else null,
+                waitMillis = if (o.has("waitMillis")) o.getLong("waitMillis") else null,
             )
         }
     }

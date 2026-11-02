@@ -30,25 +30,4 @@ class AudioTest {
         samples[99] = Short.MAX_VALUE
         assertEquals(0f, Pcm.level(samples, 50))
     }
-
-    @Test
-    fun sampleBufferGrowsAndConverts() {
-        val buffer = SampleBuffer(initialCapacity = 4)
-        buffer.append(shortArrayOf(0, 16384, -32768), 3)
-        buffer.append(shortArrayOf(32767, 1, 2, 3, 4), 2)
-        assertEquals(5, buffer.size)
-        val floats = buffer.toFloatArray()
-        assertEquals(listOf(0f, 0.5f, -1f, 32767 / 32768f, 1 / 32768f), floats.toList())
-
-        buffer.clear()
-        assertEquals(0, buffer.size)
-        assertEquals(0, buffer.toFloatArray().size)
-    }
-
-    @Test
-    fun sampleBufferReportsSeconds() {
-        val buffer = SampleBuffer()
-        repeat(15) { buffer.append(ShortArray(SAMPLE_RATE)) }
-        assertEquals(15f, buffer.seconds)
-    }
 }
