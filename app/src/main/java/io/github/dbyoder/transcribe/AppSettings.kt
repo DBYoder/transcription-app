@@ -15,6 +15,8 @@ object AppSettings {
     private const val KEY_LAST_FORMAT_USE = "last_format_use"
     private const val KEY_HIDDEN_BUBBLE_STYLES = "hidden_bubble_styles"
     private const val KEY_COMMAND_MODE = "command_mode"
+    private const val KEY_AUTO_POLISH = "auto_polish"
+    private const val KEY_BOOST_WORDS = "boost_words"
     private const val RECENT_FORMAT_MS = 24 * 60 * 60 * 1000L
 
     /** How far the bubble's bottom sits above the top of the keyboard, by default. */
@@ -68,6 +70,20 @@ object AppSettings {
 
     fun setCommandMode(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_COMMAND_MODE, enabled).apply()
+    }
+
+    /** Run Polish on every bubble dictation before typing it (needs the AI model). */
+    fun autoPolish(context: Context): Boolean = prefs(context).getBoolean(KEY_AUTO_POLISH, false)
+
+    fun setAutoPolish(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_AUTO_POLISH, enabled).apply()
+    }
+
+    /** Have the speech model listen out for the words in your dictionary. */
+    fun boostWords(context: Context): Boolean = prefs(context).getBoolean(KEY_BOOST_WORDS, true)
+
+    fun setBoostWords(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_BOOST_WORDS, enabled).apply()
     }
 
     fun bubbleOnLeft(context: Context): Boolean = prefs(context).getBoolean(KEY_BUBBLE_LEFT, false)

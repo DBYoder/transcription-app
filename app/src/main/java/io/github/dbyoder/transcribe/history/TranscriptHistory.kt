@@ -81,6 +81,12 @@ object TranscriptHistory {
         persist()
     }
 
+    /** Swaps one dictation's text (after "Fix a word"). */
+    fun replaceText(id: Long, text: String) {
+        _items.update { list -> list.map { if (it.id == id) it.copy(text = text) else it } }
+        persist()
+    }
+
     fun clear() {
         _items.value = emptyList()
         persist()

@@ -6,6 +6,8 @@ import android.content.ClipboardManager
 import android.os.Build
 import android.os.Bundle
 import android.text.InputType
+import android.view.KeyEvent
+import android.view.inputmethod.EditorInfo
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.annotation.RequiresApi
 import io.github.dbyoder.transcribe.core.TextJoin
@@ -128,6 +130,59 @@ object TextInserter {
         if (start < 0 || end > existing.length || existing.substring(start, end) != selected) return false
         val updated = existing.substring(0, start) + new + existing.substring(end)
         return setText(node, updated, cursor = start + new.length) && waitForChange(node, existing)
+    }
+
+    /**
+     * Sends the message: the text box's own Send / Go / Search / Done action if it has one,
+     * otherwise the app's Send button, otherwise the Enter key (single-line boxes only, so it
+     * never just adds a line break). Returns false if nothing could be pressed.
+     */
+    fun pressSend(service: AccessibilityService): Boolean {
+        var multiLine = false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val info = service.inputMethod?.currentInputEditorInfo
+            val connection = inputConnection(service)
+            if (info != null && connection != null) {
+                multiLine = (info.inputType and InputType.TYPE_TEXT_FLAG_MULTI_LINE) != 0
+                val action = info.imeOptions and EditorInfo.IME_MASK_ACTION
+                val enterDoesAction = (info.imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION) == 0
+                if (enterDoesAction && action in SEND_ACTIONS) {
+                    connection.performEditorAction(action)
+                    return true
+                }
+            }
+        }
+        if (clickSendButton(service)) return true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !multiLine) {
+            val connection = inputConnection(service) ?: return false
+            connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+            connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
+            return true
+        }
+        return false
+    }
+
+    private val SEND_ACTIONS = setOf(
+        EditorInfo.IME_ACTION_SEND,
+        EditorInfo.IME_ACTION_GO,
+        EditorInfo.IME_ACTION_SEARCH,
+        EditorInfo.IME_ACTION_DONE,
+    )
+
+    /** Taps the app's Send button ("Send", "Send message", "Send SMS"...), if there's one on screen. */
+    private fun clickSendButton(service: AccessibilityService): Boolean {
+        val root = runCatching { service.rootInActiveWindow }.getOrNull() ?: return false
+        val nodes = runCatching { root.findAccessibilityNodeInfosByText("send") }.getOrNull().orEmpty()
+        for (node in nodes) {
+            val label = (node.contentDescription ?: node.text)?.toString()?.trim()?.lowercase().orEmpty()
+            val isSend = label == "send" ||
+                (label.startsWith("send ") && listOf("message", "sms", "mms", "chat", "button").any { it in label })
+            if (!isSend || !node.isVisibleToUser || !node.isEnabled) continue
+            var target: AccessibilityNodeInfo? = node
+            while (target != null && !target.isClickable) target = target.parent
+            if (target != null && target.isEnabled && target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+        }
+        return false
     }
 
     /** text[start until end], if that's a sensible, non-blank range. */

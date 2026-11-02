@@ -23,6 +23,7 @@ import io.github.dbyoder.transcribe.audio.AudioRecorder
 import io.github.dbyoder.transcribe.audio.MAX_RECORDING_SECONDS
 import io.github.dbyoder.transcribe.audio.MIN_RECORDING_SECONDS
 import io.github.dbyoder.transcribe.core.FormatStyle
+import io.github.dbyoder.transcribe.core.ProcessedDictation
 import io.github.dbyoder.transcribe.core.TextJoin
 import io.github.dbyoder.transcribe.history.TranscriptHistory
 import io.github.dbyoder.transcribe.model.ModelStore
@@ -32,6 +33,7 @@ import io.github.dbyoder.transcribe.speech.TextPipeline
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.system.measureTimeMillis
 
@@ -68,10 +70,16 @@ class DictationService : AccessibilityService() {
     /** Command mode is switched on and the AI model is installed (checked on focus changes). */
     private var commandAvailable = false
 
-    /** The latest dictation (or command result) the formatting buttons work on. */
+    /**
+     * The latest dictation (or command result), still right before the cursor as far as we know.
+     * The formatting buttons and Undo work on it, and "scratch that" takes it back.
+     */
     private class LastDictation(val original: String, var shown: String)
 
     private var lastDictation: LastDictation? = null
+
+    /** The ✕ was tapped: keep the formatting buttons away until the next dictation. */
+    private var barClosed = false
 
     private val refresh = Runnable { updateBubble() }
     private val refreshCommandMode = Runnable { updateCommandMode() }
@@ -158,6 +166,7 @@ class DictationService : AccessibilityService() {
     }
 
     private fun showFormatBar() {
+        if (barClosed) return formatBar.hide()
         val last = lastDictation ?: return formatBar.hide()
         if (!bubble.isShowing) return formatBar.hide()
         val styles = AppSettings.bubbleStyles(this)
@@ -219,8 +228,7 @@ class DictationService : AccessibilityService() {
             openApp()
             return
         }
-        formatBar.hide()
-        lastDictation = null
+        formatBar.hide() // lastDictation stays, for "scratch that"
         // Text is selected: what you say is an instruction for the AI, not words to type.
         val target = if (AppSettings.commandMode(this) && Formatter.isInstalled()) TextInserter.selectedText(this) else null
         val transcription = LiveTranscription(scope)
@@ -247,6 +255,8 @@ class DictationService : AccessibilityService() {
         if (target != null) {
             toast("Say what to do with the selected text")
             scope.launch { runCatching { Formatter.ensureLoaded() } }
+        } else if (AppSettings.autoPolish(this) && Formatter.isInstalled()) {
+            scope.launch { runCatching { Formatter.ensureLoaded() } } // ready to polish when you stop
         }
     }
 
@@ -282,14 +292,14 @@ class DictationService : AccessibilityService() {
                 }
                 else -> {
                     val result = transcription.finish()
-                    val text = TextPipeline.process(this, result.text)
+                    val processed = TextPipeline.process(this, result.text, commands = target == null)
                     offerFormatting = when {
-                        text.isBlank() -> {
-                            toast(if (target != null) "No instruction heard" else "No speech detected")
+                        target == null -> handleDictation(processed, result)
+                        processed.text.isBlank() -> {
+                            toast("No instruction heard")
                             false
                         }
-                        target != null -> runCommand(target, text)
-                        else -> insertDictation(text, result)
+                        else -> runCommand(target, processed.text)
                     }
                 }
             }
@@ -304,11 +314,50 @@ class DictationService : AccessibilityService() {
         }
     }
 
+    /**
+     * Carries out a dictation: takes back the previous one ("scratch that" first), types the text,
+     * and sends the message if it ended with "send". Returns true if the formatting buttons
+     * should show.
+     */
+    private suspend fun handleDictation(processed: ProcessedDictation, result: LiveTranscription.Result): Boolean {
+        if (processed.removePrevious) takeBackPrevious()
+        if (processed.text.isBlank()) {
+            when {
+                processed.send -> sendMessage()
+                !processed.removePrevious -> toast("No speech detected")
+            }
+            return false
+        }
+        val offer = insertDictation(processed.text, result)
+        if (processed.send && lastDictation != null) {
+            sendMessage()
+            return false
+        }
+        return offer
+    }
+
+    /** "Scratch that" said first: removes the previous dictation, if it's still right before the cursor. */
+    private suspend fun takeBackPrevious() {
+        val last = lastDictation
+        if (last != null && TextInserter.replace(this, last.shown, "")) {
+            lastDictation = null
+        } else {
+            toast("Couldn't scratch the last dictation: it isn't right before the cursor any more.")
+        }
+    }
+
+    private suspend fun sendMessage() {
+        delay(SEND_DELAY_MS) // let the app catch up with the new text (and enable its Send button)
+        lastDictation = null // the text box is about to empty
+        if (!TextInserter.pressSend(this)) toast("Couldn't find a Send button here.")
+    }
+
     /** Types the dictation into the text box. Returns true if the formatting buttons should show. */
     private suspend fun insertDictation(text: String, result: LiveTranscription.Result): Boolean {
-        val inserted = TextInserter.insert(this, text)
+        val polished = if (shouldAutoPolish(text)) autoPolish(text) else null
+        val inserted = TextInserter.insert(this, polished ?: text)
         TranscriptHistory.add(
-            text,
+            polished ?: text,
             result.audioSeconds,
             result.computeMillis,
             original = result.text,
@@ -324,12 +373,41 @@ class DictationService : AccessibilityService() {
                 toast("This app didn't take the text, so it's on your clipboard. Long-press the box and tap Paste.")
             else -> Unit
         }
-        if (inserted.method.inserted && Formatter.isInstalled() && AppSettings.bubbleStyles(this).isNotEmpty()) {
-            lastDictation = LastDictation(original = inserted.text, shown = inserted.text)
-            warmUpFormatter()
-            return true
+        if (!inserted.method.inserted) {
+            lastDictation = null
+            return false
         }
-        return false
+        val shown = inserted.text
+        // After Auto-polish, Undo brings back what you said, fitted into the same spot.
+        val original = if (polished == null) {
+            shown
+        } else {
+            shown.takeWhile { it == ' ' } + TextJoin.matchEdges(text, shown.trim()) + shown.takeLastWhile { it == ' ' }
+        }
+        lastDictation = LastDictation(original = original, shown = shown)
+        barClosed = false
+        val offer = Formatter.isInstalled() && (original != shown || AppSettings.bubbleStyles(this).isNotEmpty())
+        if (offer) warmUpFormatter()
+        return offer
+    }
+
+    private fun shouldAutoPolish(text: String): Boolean {
+        if (!AppSettings.autoPolish(this) || !Formatter.isInstalled()) return false
+        val words = text.split(Regex("\\s+")).count { it.isNotEmpty() }
+        // Too short to need it; too long for the model to rewrite in one go.
+        return words in AUTO_POLISH_MIN_WORDS..AUTO_POLISH_MAX_WORDS
+    }
+
+    /** Polish, before typing. Null (type it as said) if the AI fails or seems to have cut something off. */
+    private suspend fun autoPolish(text: String): String? = try {
+        val polished = TextJoin.matchEdges(Formatter.format(text, FormatStyle.POLISH), text)
+        AppSettings.markFormatUsed(this)
+        polished.takeIf { it.length >= text.length / 2 }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        toast("Auto-polish didn't work this time, so it's typed as you said it.")
+        null
     }
 
     // --- Command mode -------------------------------------------------------------------
@@ -348,6 +426,7 @@ class DictationService : AccessibilityService() {
         val replacement = selected.takeWhile { it.isWhitespace() } + edited + selected.takeLastWhile { it.isWhitespace() }
         if (TextInserter.replaceSelection(this, selected, replacement)) {
             lastDictation = LastDictation(original = selected, shown = replacement)
+            barClosed = false
             return true
         }
         TextInserter.copy(this, edited)
@@ -398,7 +477,7 @@ class DictationService : AccessibilityService() {
 
     /** Puts the buttons away until the next dictation. A rewrite already under way still lands. */
     private fun onCloseTapped() {
-        lastDictation = null
+        barClosed = true
         formatBar.hide()
     }
 
@@ -452,6 +531,10 @@ class DictationService : AccessibilityService() {
     }
 
     companion object {
+        private const val SEND_DELAY_MS = 250L
+        private const val AUTO_POLISH_MIN_WORDS = 4
+        private const val AUTO_POLISH_MAX_WORDS = 300
+
         /** Whether the user has switched the bubble on in Android's accessibility settings. */
         fun isEnabled(context: Context): Boolean {
             val ours = ComponentName(context, DictationService::class.java)

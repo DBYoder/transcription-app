@@ -12,7 +12,10 @@ the text box. Long dictations are transcribed while you talk, so there's little 
 (up to 30 minutes at a time). Dictation is
 tidied up instantly (no AI): "um"s and stutters removed, spoken punctuation ("comma",
 "question mark", "period"...) typed as the mark itself, and a spoken "new paragraph" becomes
-a line break. Optional on-device AI buttons (Polish, Bullets, Email, Shorter, Prompt) rewrite a
+a line break. Voice commands: "scratch that" deletes what you just said, "thumbs up emoji"
+types 👍, and ending with "send" sends the message. Your own words and names are spelled your
+way (add them, or tap "Fix a word" on a dictation), and snippets insert saved text ("insert
+my email"). Optional on-device AI buttons (Polish, Bullets, Email, Shorter, Prompt) rewrite a
 dictation for you, for example into a tidy work email or a well-structured prompt for an AI chat.
 With the AI model, *command mode* edits text you select: select it, tap the bubble and say what to
 do ("make this friendlier"). See [docs/PLAN.md](docs/PLAN.md).
@@ -44,7 +47,9 @@ do ("make this friendlier"). See [docs/PLAN.md](docs/PLAN.md).
    you don't use under **Buttons beside the bubble** in the same card. With the AI model,
    select some text and the bubble turns purple: tap or hold it and say what to do with the
    selection ("translate to Spanish", "turn this into a list"). Switch this off under
-   **Command mode** if you'd rather dictate over a selection.
+   **Command mode** if you'd rather dictate over a selection. **Auto-polish** runs Polish on
+   every dictation, so self-corrections ("Tuesday, no wait, Wednesday") come out clean.
+7. Optional: add names and terms under **Your words**, and saved text under **Snippets**.
 
 Later builds install over the top; models and settings stay put.
 
@@ -65,8 +70,8 @@ covers 25 European languages. Use **Replace model** in the app.
 ## How it's built
 
 - `core/`: plain Kotlin logic (model unpacking, cutting long recordings at pauses, tidy-up,
-  spacing when inserting text, AI prompts) with unit tests that run on any computer:
-  `./gradlew :core:test`.
+  voice commands, your dictionary and snippets, spacing when inserting text, AI prompts) with
+  unit tests that run on any computer: `./gradlew :core:test`.
 - `app/`: the Android app. `./gradlew :app:assembleRelease` builds the APK. The sherpa-onnx
   library is downloaded from its GitHub release at build time.
   - `bubble/`: the accessibility service, the overlay bubble, and text insertion.

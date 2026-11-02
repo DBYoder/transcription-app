@@ -87,6 +87,11 @@ import kotlinx.coroutines.launch
 fun MainScreen(viewModel: MainViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val history by viewModel.history.collectAsStateWithLifecycle()
+    val words by viewModel.words.collectAsStateWithLifecycle()
+    val snippets by viewModel.snippets.collectAsStateWithLifecycle()
+    var addingWord by remember { mutableStateOf(false) }
+    var addingSnippet by remember { mutableStateOf(false) }
+    var fixing by remember { mutableStateOf<Transcript?>(null) }
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val clipboard = LocalClipboardManager.current
@@ -177,12 +182,30 @@ fun MainScreen(viewModel: MainViewModel) {
                 }
                 item { CleanUpCard(enabled = state.cleanUp, onChange = viewModel::setCleanUp) }
                 item {
+                    WordsCard(
+                        words = words,
+                        boost = state.boostWords,
+                        onBoost = viewModel::setBoostWords,
+                        onAdd = { addingWord = true },
+                        onRemove = viewModel::removeWord,
+                    )
+                }
+                item {
+                    SnippetsCard(
+                        snippets = snippets,
+                        onAdd = { addingSnippet = true },
+                        onRemove = viewModel::removeSnippet,
+                    )
+                }
+                item {
                     FormatCard(
                         ai = state.ai,
                         bubbleStyles = state.bubbleStyles,
                         onBubbleStyle = viewModel::setBubbleStyleShown,
                         commandMode = state.commandMode,
                         onCommandMode = viewModel::setCommandMode,
+                        autoPolish = state.autoPolish,
+                        onAutoPolish = viewModel::setAutoPolish,
                         onDownload = { openLink(uriHandler, FormatModelStore.RECOMMENDED_MODEL_URL, viewModel) },
                         onOpenPage = { openLink(uriHandler, FormatModelStore.RECOMMENDED_MODEL_PAGE, viewModel) },
                         onImport = { aiImportLauncher.launch(arrayOf("*/*")) },
@@ -206,9 +229,39 @@ fun MainScreen(viewModel: MainViewModel) {
                     canFormat = state.ai is AiModelState.Ready && state.formattingId == null,
                     formatting = state.formattingId == transcript.id,
                     onFormat = { style -> viewModel.format(transcript, style) },
+                    onFix = { fixing = transcript },
                 )
             }
         }
+    }
+
+    if (addingWord) {
+        AddWordDialog(
+            onDismiss = { addingWord = false },
+            onSave = { word, heardAs ->
+                viewModel.addWord(word, heardAs)
+                addingWord = false
+            },
+        )
+    }
+    if (addingSnippet) {
+        AddSnippetDialog(
+            onDismiss = { addingSnippet = false },
+            onSave = { trigger, text ->
+                viewModel.addSnippet(trigger, text)
+                addingSnippet = false
+            },
+        )
+    }
+    fixing?.let { transcript ->
+        FixWordDialog(
+            transcript = transcript,
+            onDismiss = { fixing = null },
+            onSave = { wrong, right ->
+                viewModel.fixWord(transcript, wrong, right)
+                fixing = null
+            },
+        )
     }
 }
 
@@ -384,6 +437,12 @@ private fun CleanUpCard(enabled: Boolean, onChange: (Boolean) -> Unit) {
                         "\"colon\", \"open quote\"...) to type it, and \"new line\" or \"new paragraph\" " +
                         "for a line break. Instant, no AI.",
                 )
+                Hint(
+                    "Voice commands: \"scratch that\" deletes the sentence you just said (said first, it " +
+                        "takes back your last dictation). Say an emoji's name and \"emoji\" (\"thumbs up " +
+                        "emoji\") to type it. End with \"send\" after a pause, or \"press enter\", to send " +
+                        "the message.",
+                )
             }
             Switch(checked = enabled, onCheckedChange = onChange)
         }
@@ -460,6 +519,7 @@ private fun TranscriptCard(
     canFormat: Boolean,
     formatting: Boolean,
     onFormat: (FormatStyle) -> Unit,
+    onFix: () -> Unit,
 ) {
     OutlinedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(start = 16.dp, top = 8.dp, end = 4.dp, bottom = 12.dp)) {
@@ -480,11 +540,15 @@ private fun TranscriptCard(
                     modifier = Modifier.padding(end = 12.dp, bottom = 4.dp),
                 )
             }
-            Text(
-                statsLine(transcript),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    statsLine(transcript),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onFix) { Text("Fix a word") }
+            }
             if (formatting) {
                 Column(Modifier.padding(top = 8.dp, end = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -511,6 +575,8 @@ private fun FormatCard(
     onBubbleStyle: (FormatStyle, Boolean) -> Unit,
     commandMode: Boolean,
     onCommandMode: (Boolean) -> Unit,
+    autoPolish: Boolean,
+    onAutoPolish: (Boolean) -> Unit,
     onDownload: () -> Unit,
     onOpenPage: () -> Unit,
     onImport: () -> Unit,
@@ -586,6 +652,21 @@ private fun FormatCard(
                         }
                         Switch(checked = commandMode, onCheckedChange = onCommandMode)
                     }
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Auto-polish", style = MaterialTheme.typography.titleSmall)
+                            Hint(
+                                "Runs Polish on everything you dictate with the bubble before it's typed, so " +
+                                    "\"Tuesday, no wait, Wednesday\" comes out as \"Wednesday\". Adds a few " +
+                                    "seconds each time. Undo brings back your exact words.",
+                            )
+                        }
+                        Switch(checked = autoPolish, onCheckedChange = onAutoPolish)
+                    }
                     Hint("Model: ${ai.name}")
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = onImport) { Text("Replace") }
@@ -624,7 +705,7 @@ private fun FormatStyle.summary(): String = when (this) {
 }
 
 @Composable
-private fun Hint(text: String) {
+internal fun Hint(text: String) {
     Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
