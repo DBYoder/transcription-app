@@ -72,6 +72,8 @@ data class UiState(
     val recorder: RecorderState = RecorderState.Idle,
     val threads: Int = DEFAULT_THREADS,
     val cleanUp: Boolean = true,
+    /** The AI formatting buttons that pop up beside the bubble. */
+    val bubbleStyles: Set<FormatStyle> = FormatStyle.entries.toSet(),
     val setup: SetupState = SetupState(),
     val ai: AiModelState = AiModelState.Missing,
     /** The history item an AI formatting button is working on, if any. */
@@ -88,7 +90,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private var importJob: Job? = null
 
     private val _state = MutableStateFlow(
-        UiState(threads = AppSettings.threads(app), cleanUp = AppSettings.cleanUp(app)),
+        UiState(
+            threads = AppSettings.threads(app),
+            cleanUp = AppSettings.cleanUp(app),
+            bubbleStyles = AppSettings.bubbleStyles(app).toSet(),
+        ),
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
 
@@ -292,6 +298,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun setCleanUp(enabled: Boolean) {
         AppSettings.setCleanUp(getApplication<Application>(), enabled)
         _state.update { it.copy(cleanUp = enabled) }
+    }
+
+    fun setBubbleStyleShown(style: FormatStyle, shown: Boolean) {
+        val app = getApplication<Application>()
+        AppSettings.setBubbleStyleShown(app, style, shown)
+        _state.update { it.copy(bubbleStyles = AppSettings.bubbleStyles(app).toSet()) }
     }
 
     fun clearHistory() = TranscriptHistory.clear()

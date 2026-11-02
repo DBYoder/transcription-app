@@ -65,7 +65,7 @@ class DictationService : AccessibilityService() {
 
     override fun onServiceConnected() {
         bubble = BubbleOverlay(this, ::onBubbleTapped)
-        formatBar = FormatBar(this, onFormat = ::onFormatTapped, onUndo = ::onUndoTapped)
+        formatBar = FormatBar(this, onFormat = ::onFormatTapped, onUndo = ::onUndoTapped, onClose = ::onCloseTapped)
         bubble.onDragStart = { formatBar.hide() }
         updateBubble()
     }
@@ -121,7 +121,10 @@ class DictationService : AccessibilityService() {
     private fun showFormatBar() {
         val last = lastDictation ?: return formatBar.hide()
         if (!bubble.isShowing) return formatBar.hide()
-        formatBar.show(bubble.bounds, bubble.isOnLeft, bubble.screenWidth, showUndo = last.shown != last.original)
+        val styles = AppSettings.bubbleStyles(this)
+        val showUndo = last.shown != last.original
+        if (styles.isEmpty() && !showUndo) return formatBar.hide()
+        formatBar.show(bubble.bounds, bubble.isOnLeft, bubble.screenWidth, styles, showUndo)
     }
 
     /** Top edge of the on-screen keyboard, or null if no keyboard is showing. */
@@ -201,7 +204,8 @@ class DictationService : AccessibilityService() {
                     } else {
                         val result = TextInserter.insert(this, text)
                         TranscriptHistory.add(text, seconds, millis, original = raw, insertedVia = result.method.label)
-                        if (result.method.inserted && Formatter.isInstalled()) {
+                        val offerStyles = AppSettings.bubbleStyles(this).isNotEmpty()
+                        if (result.method.inserted && Formatter.isInstalled() && offerStyles) {
                             lastDictation = LastDictation(original = result.text, shown = result.text)
                             offerFormatting = true
                             warmUpFormatter()
@@ -268,6 +272,12 @@ class DictationService : AccessibilityService() {
                 false
             }
         }
+    }
+
+    /** Puts the buttons away until the next dictation. A rewrite already under way still lands. */
+    private fun onCloseTapped() {
+        lastDictation = null
+        formatBar.hide()
     }
 
     /** Runs a formatting [action] on the latest dictation; it returns false to retire the buttons. */

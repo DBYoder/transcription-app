@@ -54,6 +54,10 @@ Goal: a Wispr Flow-style dictation tool for a Pixel 10a (Tensor G4, 8 GB RAM) th
    - **Prompt** (added after testing): turns spoken instructions into a structured prompt for an
      AI assistant: the task first, then Context / Requirements / Output sections only where the
      dictation covers them, with Markdown "- " bullets that chat apps render as lists.
+   - **Choosing buttons and closing them** (added after testing): the AI formatting card has a
+     checklist of which buttons pop up beside the bubble (none ticked means no pop-up; every
+     button stays on each dictation in the app). The pop-up has a ✕ at the end farthest from the
+     bubble, so closing it never starts a dictation by mistake.
    - Next: *command mode* (select text, tap the bubble, say what to do with it) and
      per-app defaults (e.g. always offer Email first in Gmail).
 5. **Polish the bubble**: hold-to-talk, settings, and voice activity detection so long

@@ -14,6 +14,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +29,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledIconButton
@@ -63,6 +65,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -176,6 +179,8 @@ fun MainScreen(viewModel: MainViewModel) {
                 item {
                     FormatCard(
                         ai = state.ai,
+                        bubbleStyles = state.bubbleStyles,
+                        onBubbleStyle = viewModel::setBubbleStyleShown,
                         onDownload = { openLink(uriHandler, FormatModelStore.RECOMMENDED_MODEL_URL, viewModel) },
                         onOpenPage = { openLink(uriHandler, FormatModelStore.RECOMMENDED_MODEL_PAGE, viewModel) },
                         onImport = { aiImportLauncher.launch(arrayOf("*/*")) },
@@ -498,6 +503,8 @@ private fun TranscriptCard(
 @Composable
 private fun FormatCard(
     ai: AiModelState,
+    bubbleStyles: Set<FormatStyle>,
+    onBubbleStyle: (FormatStyle, Boolean) -> Unit,
     onDownload: () -> Unit,
     onOpenPage: () -> Unit,
     onImport: () -> Unit,
@@ -536,11 +543,28 @@ private fun FormatCard(
                 is AiModelState.Ready -> {
                     Text("AI formatting is on", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "After you dictate with the bubble, tap Polish, Bullets, Email, Shorter or Prompt next to it to " +
-                            "rewrite what you just said (Undo puts it back). The same buttons are on each " +
-                            "dictation below. The first tap takes longer while the model loads.",
+                        "After you dictate with the bubble, tap a button next to it to rewrite what you just " +
+                            "said (Undo puts it back, ✕ puts the buttons away). Every button is on each dictation " +
+                            "below. The first tap takes longer while the model loads.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
+                    Text(
+                        "Buttons beside the bubble",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    Column {
+                        for (style in FormatStyle.entries) {
+                            StyleOption(
+                                style = style,
+                                checked = style in bubbleStyles,
+                                onChange = { shown -> onBubbleStyle(style, shown) },
+                            )
+                        }
+                    }
+                    if (bubbleStyles.isEmpty()) {
+                        Hint("None picked, so no buttons pop up after you dictate. You can still format dictations below.")
+                    }
                     Hint("Model: ${ai.name}")
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = onImport) { Text("Replace") }
@@ -550,6 +574,32 @@ private fun FormatCard(
             }
         }
     }
+}
+
+@Composable
+private fun StyleOption(style: FormatStyle, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .toggleable(value = checked, role = Role.Checkbox, onValueChange = onChange)
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked = checked, onCheckedChange = null, modifier = Modifier.padding(12.dp))
+        Column(Modifier.padding(start = 4.dp)) {
+            Text(style.label, style = MaterialTheme.typography.bodyLarge)
+            Hint(style.summary())
+        }
+    }
+}
+
+/** A one-line description of what each formatting button does. */
+private fun FormatStyle.summary(): String = when (this) {
+    FormatStyle.POLISH -> "Fixes grammar and punctuation, keeps your words"
+    FormatStyle.BULLETS -> "Turns it into a list of key points"
+    FormatStyle.EMAIL -> "Lays it out as an email, in your voice"
+    FormatStyle.SHORTER -> "Cuts it to about half the length"
+    FormatStyle.PROMPT -> "Turns it into clear instructions for an AI chat"
 }
 
 @Composable
