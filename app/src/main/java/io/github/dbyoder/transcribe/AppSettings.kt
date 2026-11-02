@@ -2,6 +2,7 @@ package io.github.dbyoder.transcribe
 
 import android.content.Context
 import android.content.SharedPreferences
+import io.github.dbyoder.transcribe.core.FormatStyle
 
 const val DEFAULT_THREADS = 4
 
@@ -12,6 +13,7 @@ object AppSettings {
     private const val KEY_BUBBLE_OFFSET_DP = "bubble_offset_dp"
     private const val KEY_CLEAN_UP = "clean_up"
     private const val KEY_LAST_FORMAT_USE = "last_format_use"
+    private const val KEY_HIDDEN_BUBBLE_STYLES = "hidden_bubble_styles"
     private const val RECENT_FORMAT_MS = 24 * 60 * 60 * 1000L
 
     /** How far the bubble's bottom sits above the top of the keyboard, by default. */
@@ -40,6 +42,25 @@ object AppSettings {
     /** True if an AI formatting button was used in the last day (worth loading the model early). */
     fun formattedRecently(context: Context): Boolean =
         System.currentTimeMillis() - prefs(context).getLong(KEY_LAST_FORMAT_USE, 0L) < RECENT_FORMAT_MS
+
+    /**
+     * The AI formatting buttons that pop up beside the bubble, in their usual order. Stores the
+     * ones switched off, so any style added in a later version shows up by default.
+     */
+    fun bubbleStyles(context: Context): List<FormatStyle> {
+        val hidden = hiddenBubbleStyles(context)
+        return FormatStyle.entries.filter { it.name !in hidden }
+    }
+
+    fun setBubbleStyleShown(context: Context, style: FormatStyle, shown: Boolean) {
+        val hidden = hiddenBubbleStyles(context).toMutableSet()
+        if (shown) hidden -= style.name else hidden += style.name
+        prefs(context).edit().putString(KEY_HIDDEN_BUBBLE_STYLES, hidden.joinToString(",")).apply()
+    }
+
+    private fun hiddenBubbleStyles(context: Context): Set<String> =
+        prefs(context).getString(KEY_HIDDEN_BUBBLE_STYLES, null).orEmpty()
+            .split(',').filter { it.isNotEmpty() }.toSet()
 
     fun bubbleOnLeft(context: Context): Boolean = prefs(context).getBoolean(KEY_BUBBLE_LEFT, false)
 

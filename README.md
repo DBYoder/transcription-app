@@ -36,7 +36,8 @@ dictation for you, for example into a tidy work email or a well-structured promp
    Drag the bubble to move it.
 6. Optional: in the app's **AI formatting** card, download the AI model (Google's Gemma 4
    E2B, about 2.6 GB) and import it. Formatting buttons then appear beside the bubble after
-   each dictation, and on each dictation in the app.
+   each dictation (tap ✕ to put them away), and on each dictation in the app. Untick the ones
+   you don't use under **Buttons beside the bubble** in the same card.
 
 Later builds install over the top; models and settings stay put.
 

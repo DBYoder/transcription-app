@@ -18,44 +18,60 @@ import io.github.dbyoder.transcribe.core.FormatStyle
 import kotlin.math.roundToInt
 
 /**
- * A row of one-tap AI formatting buttons (Polish, Bullets, Email, Shorter, Prompt, and Undo once
- * something has been reformatted) shown beside the bubble right after a dictation. Like the
- * bubble, it's an accessibility overlay that never takes focus from the text box.
+ * A row of one-tap AI formatting buttons (the styles picked in the app, plus Undo once
+ * something has been reformatted) shown beside the bubble right after a dictation, with a ✕ to
+ * put it away. Like the bubble, it's an accessibility overlay that never takes focus from the
+ * text box.
  */
 class FormatBar(
     private val context: Context,
     private val onFormat: (FormatStyle) -> Unit,
     private val onUndo: () -> Unit,
+    private val onClose: () -> Unit,
 ) {
     private val windowManager = context.getSystemService(WindowManager::class.java)
     private val density = context.resources.displayMetrics.density
     private val gapPx = (6 * density).roundToInt()
     private val minWidthPx = (160 * density).roundToInt()
+    private val dividerWidthPx = density.roundToInt().coerceAtLeast(1)
     private val handler = Handler(Looper.getMainLooper())
     private val autoHide = Runnable { hide() }
 
     private val undoButton = button("Undo") { onUndo() }
-    private val styleButtons = FormatStyle.entries.map { style -> button(style.label) { onFormat(style) } }
+    private val styleButtons = FormatStyle.entries.associateWith { style -> button(style.label) { onFormat(style) } }
+
+    // Stays put while the other buttons scroll, so it's always one tap away.
+    private val closeButton = button("✕", horizontalPaddingDp = 14, textSp = 16f) { onClose() }.apply {
+        contentDescription = "Close"
+        setTextColor(Color.argb(200, 255, 255, 255))
+    }
 
     private val row = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         val pad = (4 * density).roundToInt()
         setPadding(pad, pad, pad, pad)
         addView(undoButton)
-        styleButtons.forEach(::addView)
+        styleButtons.values.forEach(::addView)
     }
 
     // Scrolls sideways when the buttons don't all fit beside the bubble.
-    private val bar = HorizontalScrollView(context).apply {
+    private val scroller = HorizontalScrollView(context).apply {
         isHorizontalScrollBarEnabled = false
         overScrollMode = View.OVER_SCROLL_NEVER
+        addView(row)
+    }
+
+    private val divider = View(context).apply { setBackgroundColor(Color.argb(60, 255, 255, 255)) }
+
+    private val bar = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
         clipToOutline = true
         background = GradientDrawable().apply {
             cornerRadius = 22 * density
             setColor(context.getColor(android.R.color.system_neutral1_800))
         }
         elevation = 6 * density
-        addView(row)
     }
 
     private val params = WindowManager.LayoutParams(
@@ -73,16 +89,29 @@ class FormatBar(
     }
 
     private var attached = false
+    private var closeOnLeft: Boolean? = null
 
     val isShowing: Boolean get() = attached
 
-    /** Shows the bar beside [bubble] (screen pixels). */
-    fun show(bubble: Rect, bubbleOnLeft: Boolean, screenWidth: Int, showUndo: Boolean) {
+    /** Shows the bar beside [bubble] (screen pixels) with buttons for [styles]. */
+    fun show(
+        bubble: Rect,
+        bubbleOnLeft: Boolean,
+        screenWidth: Int,
+        styles: Collection<FormatStyle>,
+        showUndo: Boolean,
+    ) {
         undoButton.visibility = if (showUndo) View.VISIBLE else View.GONE
+        styleButtons.forEach { (style, button) -> button.visibility = if (style in styles) View.VISIBLE else View.GONE }
+        // The ✕ goes on the far end from the bubble, so closing never starts a dictation by mistake.
+        arrange(closeOnLeft = !bubbleOnLeft)
+
         row.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+        closeButton.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+        val fullWidth = row.measuredWidth + dividerWidthPx + closeButton.measuredWidth
         val available = (if (bubbleOnLeft) screenWidth - bubble.right else bubble.left) - 2 * gapPx
-        val width = row.measuredWidth.coerceAtMost(available.coerceAtLeast(minWidthPx))
-        val height = row.measuredHeight
+        val width = fullWidth.coerceAtMost(available.coerceAtLeast(minWidthPx))
+        val height = maxOf(row.measuredHeight, closeButton.measuredHeight)
         params.width = width
         params.x = if (bubbleOnLeft) {
             (bubble.right + gapPx).coerceAtMost((screenWidth - width - gapPx).coerceAtLeast(0))
@@ -96,15 +125,15 @@ class FormatBar(
             windowManager.addView(bar, params)
             attached = true
         }
-        bar.post { bar.scrollTo(0, 0) }
+        scroller.post { scroller.scrollTo(0, 0) }
         keepVisible()
     }
 
-    /** Dims the buttons while the AI is working. */
+    /** Dims the buttons while the AI is working. The ✕ still works. */
     fun setBusy(busy: Boolean) {
-        bar.alpha = if (busy) 0.5f else 1f
+        scroller.alpha = if (busy) 0.5f else 1f
         undoButton.isEnabled = !busy
-        styleButtons.forEach { it.isEnabled = !busy }
+        styleButtons.values.forEach { it.isEnabled = !busy }
         if (busy) handler.removeCallbacks(autoHide) else keepVisible()
     }
 
@@ -115,16 +144,37 @@ class FormatBar(
         attached = false
     }
 
+    private fun arrange(closeOnLeft: Boolean) {
+        if (this.closeOnLeft == closeOnLeft) return
+        this.closeOnLeft = closeOnLeft
+        bar.removeAllViews()
+        val dividerHeight = (20 * density).roundToInt()
+        val parts = listOf(
+            scroller to LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+            divider to LinearLayout.LayoutParams(dividerWidthPx, dividerHeight),
+            closeButton to LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+        for ((view, layout) in if (closeOnLeft) parts.reversed() else parts) bar.addView(view, layout)
+    }
+
     private fun keepVisible() {
         handler.removeCallbacks(autoHide)
         handler.postDelayed(autoHide, AUTO_HIDE_MS)
     }
 
-    private fun button(label: String, onClick: () -> Unit) = TextView(context).apply {
+    private fun button(
+        label: String,
+        horizontalPaddingDp: Int = 11,
+        textSp: Float = 14f,
+        onClick: () -> Unit,
+    ) = TextView(context).apply {
         text = label
         setTextColor(Color.WHITE)
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-        val h = (11 * density).roundToInt()
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, textSp)
+        val h = (horizontalPaddingDp * density).roundToInt()
         val v = (9 * density).roundToInt()
         setPadding(h, v, h, v)
         isClickable = true
