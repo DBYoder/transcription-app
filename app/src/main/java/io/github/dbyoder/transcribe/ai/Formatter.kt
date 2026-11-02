@@ -8,6 +8,7 @@ import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.ThinkingConfig
+import io.github.dbyoder.transcribe.core.EditCommand
 import io.github.dbyoder.transcribe.core.FormatOutput
 import io.github.dbyoder.transcribe.core.FormatStyle
 import kotlinx.coroutines.CoroutineScope
@@ -22,8 +23,8 @@ import kotlinx.coroutines.withContext
 import kotlin.system.measureTimeMillis
 
 /**
- * Rewrites dictated text with a small AI model running on the phone (LiteRT-LM), for the
- * Polish / Bullets / Email / Shorter / Prompt buttons.
+ * Rewrites text with a small AI model running on the phone (LiteRT-LM), for the Polish /
+ * Bullets / Email / Shorter / Prompt buttons and command mode.
  *
  * The model is big (a couple of GB in memory), so it loads on first use (GPU if the phone
  * allows, otherwise CPU) and unloads after [IDLE_UNLOAD_MS] without use.
@@ -54,21 +55,28 @@ object Formatter {
     }
 
     /** Rewrites [text] in the given [style]. Takes a few seconds. */
-    suspend fun format(text: String, style: FormatStyle): String = withContext(Dispatchers.Default) {
+    suspend fun format(text: String, style: FormatStyle): String =
+        generate(FormatStyle.SYSTEM_INSTRUCTION, FormatStyle.prompt(style, text), style.bullet)
+
+    /** Command mode: does what the spoken [instruction] says to [text]. */
+    suspend fun edit(text: String, instruction: String): String =
+        generate(EditCommand.SYSTEM_INSTRUCTION, EditCommand.prompt(instruction, text), bullet = "• ")
+
+    private suspend fun generate(system: String, message: String, bullet: String): String = withContext(Dispatchers.Default) {
         mutex.withLock {
             loadLocked() ?: throw IllegalStateException("The AI model isn't set up yet. Open Transcribe to add it.")
             val config = ConversationConfig(
-                systemInstruction = Contents.of(FormatStyle.SYSTEM_INSTRUCTION),
+                systemInstruction = Contents.of(system),
                 // Near-greedy: we want the faithful edit, not creativity.
                 samplerConfig = SamplerConfig(topK = 1, topP = 1.0, temperature = 0.1),
                 maxOutputToken = MAX_OUTPUT_TOKENS,
                 thinkingConfig = ThinkingConfig(enableThinking = false),
             )
             val reply = checkNotNull(engine).createConversation(config).use { conversation ->
-                conversation.sendMessage(FormatStyle.prompt(style, text)).toString()
+                conversation.sendMessage(message).toString()
             }
             scheduleIdleUnload()
-            FormatOutput.clean(reply, style.bullet).ifBlank { throw IllegalStateException("The AI model returned nothing") }
+            FormatOutput.clean(reply, bullet).ifBlank { throw IllegalStateException("The AI model returned nothing") }
         }
     }
 

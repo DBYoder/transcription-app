@@ -63,6 +63,22 @@ enum class FormatStyle(val label: String, val instruction: String, val bullet: S
     }
 }
 
+/**
+ * Command mode: the user selected some text, tapped the bubble and said what to do with it
+ * ("make this friendlier", "translate to Spanish", "turn it into a list").
+ */
+object EditCommand {
+    const val SYSTEM_INSTRUCTION =
+        "You edit text for someone. They selected some text and said out loud what to do with it. " +
+            "Do exactly that, and keep everything they didn't ask to change as it is. Reply with only the " +
+            "resulting text, which replaces their selection: no introduction, explanation or quotation " +
+            "marks around it."
+
+    /** The message sent to the model. */
+    fun prompt(instruction: String, text: String): String =
+        "Instruction: ${instruction.trim()}\n\nSelected text:\n\"\"\"\n${text.trim()}\n\"\"\""
+}
+
 /** Tidies the model's reply into plain text that looks right in any text box. */
 object FormatOutput {
     private val PREAMBLE = Regex("""^(sure|okay|ok|certainly|of course)?[,!.]?\s*(here('s| is| are)\b[^\n]*:)\s*\n""", RegexOption.IGNORE_CASE)

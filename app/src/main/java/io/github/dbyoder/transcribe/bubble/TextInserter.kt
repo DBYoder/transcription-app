@@ -90,6 +90,54 @@ object TextInserter {
         return setText(node, updated, cursor = index + new.length) && waitForChange(node, existing)
     }
 
+    /**
+     * The text selected in the focused text box, or null if nothing (or only spaces) is selected,
+     * it's a password field, or the app doesn't let us read it.
+     */
+    fun selectedText(service: AccessibilityService): String? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val connection = inputConnection(service)
+            val around = connection?.let { runCatching { it.getSurroundingText(0, 0, 0) }.getOrNull() }
+            if (around != null) return selectionOf(around.text.toString(), around.selectionStart, around.selectionEnd)
+        }
+        val node = focusedTextBox(service) ?: return null
+        if (node.isPassword) return null
+        val text = currentText(node) ?: return null
+        return selectionOf(text, node.textSelectionStart, node.textSelectionEnd)
+    }
+
+    /**
+     * Swaps the selection for [new] if [selected] is still what's selected. Returns false if the
+     * selection has changed, so the caller can fall back to the clipboard.
+     */
+    suspend fun replaceSelection(service: AccessibilityService, selected: String, new: String): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val connection = inputConnection(service)
+            val around = connection?.let { runCatching { it.getSurroundingText(0, 0, 0) }.getOrNull() }
+            if (connection != null && around != null) {
+                if (selectionOf(around.text.toString(), around.selectionStart, around.selectionEnd) != selected) return false
+                connection.commitText(new, 1, null) // replaces the selection, like typing over it
+                return true
+            }
+        }
+        val node = focusedTextBox(service) ?: return false
+        if (node.isPassword) return false
+        val existing = currentText(node) ?: return false
+        val start = min(node.textSelectionStart, node.textSelectionEnd)
+        val end = max(node.textSelectionStart, node.textSelectionEnd)
+        if (start < 0 || end > existing.length || existing.substring(start, end) != selected) return false
+        val updated = existing.substring(0, start) + new + existing.substring(end)
+        return setText(node, updated, cursor = start + new.length) && waitForChange(node, existing)
+    }
+
+    /** text[start until end], if that's a sensible, non-blank range. */
+    private fun selectionOf(text: String, start: Int, end: Int): String? {
+        val from = min(start, end)
+        val to = max(start, end)
+        if (from < 0 || to > text.length || from == to) return null
+        return text.substring(from, to).takeIf { it.isNotBlank() }
+    }
+
     fun copy(service: AccessibilityService, text: String) {
         val clipboard = service.getSystemService(ClipboardManager::class.java)
         clipboard.setPrimaryClip(ClipData.newPlainText("Dictation", text))

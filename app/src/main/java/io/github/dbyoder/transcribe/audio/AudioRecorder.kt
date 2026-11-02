@@ -6,7 +6,6 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import io.github.dbyoder.transcribe.core.Pcm
 import io.github.dbyoder.transcribe.core.SAMPLE_RATE
-import io.github.dbyoder.transcribe.core.SampleBuffer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -15,32 +14,36 @@ import kotlinx.coroutines.launch
 import kotlin.math.max
 
 /**
- * Longest single dictation. Parakeet handles a whole clip at once, and very long clips use a
- * lot of memory; chunking with voice detection (phase 3) will lift this.
+ * Longest single dictation. Long dictations are transcribed in pieces while you talk (see
+ * LiveTranscription), so this is only a safety stop for a bubble left on by mistake.
  */
-const val MAX_RECORDING_SECONDS = 180
+const val MAX_RECORDING_SECONDS = 30 * 60
 
 /** Anything shorter is treated as an accidental tap. */
 const val MIN_RECORDING_SECONDS = 0.3f
 
 /**
- * Records 16 kHz mono audio from the microphone into memory.
+ * Records 16 kHz mono audio from the microphone and hands it over as it arrives.
  *
- * Call [start], then [stop] to get the samples. Not thread-safe: call both from the same
- * thread (the main thread in practice).
+ * Call [start], then [stop]. Not thread-safe: call both from the same thread (the main
+ * thread in practice).
  */
 class AudioRecorder(private val maxSeconds: Int) {
     private var record: AudioRecord? = null
     private var job: Job? = null
-    private val buffer = SampleBuffer()
+
+    @Volatile
+    private var recordedSamples = 0L
 
     val isRecording: Boolean get() = record != null
 
     /**
      * Starts recording. The caller must already hold the RECORD_AUDIO permission.
      *
-     * @param onProgress called about every 100 ms (on a background thread) with the
-     *   seconds recorded so far and the current loudness (0..1).
+     * @param onAudio called about every 100 ms (on a background thread, never two at once) with
+     *   the new audio as floats in -1..1.
+     * @param onProgress called after each [onAudio] with the seconds recorded so far and the
+     *   current loudness (0..1).
      * @param onLimitReached called (on a background thread) once [maxSeconds] is reached.
      *   Recording pauses there; the caller should then call [stop].
      * @throws IllegalStateException if the microphone can't be opened.
@@ -48,6 +51,7 @@ class AudioRecorder(private val maxSeconds: Int) {
     @SuppressLint("MissingPermission")
     fun start(
         scope: CoroutineScope,
+        onAudio: (FloatArray) -> Unit,
         onProgress: (seconds: Float, level: Float) -> Unit,
         onLimitReached: () -> Unit,
     ) {
@@ -65,14 +69,15 @@ class AudioRecorder(private val maxSeconds: Int) {
             SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT,
-            max(minBytes, SAMPLE_RATE), // at least 0.5 s of 16-bit audio
+            // Room for a couple of seconds, in case the phone is busy transcribing an earlier piece.
+            max(minBytes, SAMPLE_RATE * 4),
         )
         if (rec.state != AudioRecord.STATE_INITIALIZED) {
             rec.release()
             throw IllegalStateException("Couldn't open the microphone. Is another app using it?")
         }
 
-        buffer.clear()
+        recordedSamples = 0
         rec.startRecording()
         record = rec
         job = scope.launch(Dispatchers.IO) {
@@ -81,9 +86,11 @@ class AudioRecorder(private val maxSeconds: Int) {
                 val n = rec.read(chunk, 0, chunk.size)
                 if (n < 0) break // the recorder was stopped or failed
                 if (n == 0) continue
-                buffer.append(chunk, n)
-                onProgress(buffer.seconds, Pcm.level(chunk, n))
-                if (buffer.seconds >= maxSeconds) {
+                onAudio(FloatArray(n) { Pcm.toFloat(chunk[it]) })
+                recordedSamples += n
+                val seconds = recordedSamples / SAMPLE_RATE.toFloat()
+                onProgress(seconds, Pcm.level(chunk, n))
+                if (seconds >= maxSeconds) {
                     onLimitReached()
                     break
                 }
@@ -91,9 +98,12 @@ class AudioRecorder(private val maxSeconds: Int) {
         }
     }
 
-    /** Stops recording and returns everything recorded since [start]. */
-    suspend fun stop(): FloatArray {
-        val rec = record ?: return FloatArray(0)
+    /**
+     * Stops recording and returns how many seconds were recorded. Every bit of audio has been
+     * passed to onAudio by the time this returns.
+     */
+    suspend fun stop(): Float {
+        val rec = record ?: return 0f
         val reader = job
         reader?.cancel()
         runCatching { rec.stop() } // unblocks a pending read()
@@ -101,9 +111,7 @@ class AudioRecorder(private val maxSeconds: Int) {
         rec.release()
         record = null
         job = null
-        val samples = buffer.toFloatArray()
-        buffer.clear()
-        return samples
+        return recordedSamples / SAMPLE_RATE.toFloat()
     }
 
     /** Stops recording and throws the audio away. Safe to call from onCleared(). */

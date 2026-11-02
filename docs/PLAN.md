@@ -58,11 +58,22 @@ Goal: a Wispr Flow-style dictation tool for a Pixel 10a (Tensor G4, 8 GB RAM) th
      checklist of which buttons pop up beside the bubble (none ticked means no pop-up; every
      button stays on each dictation in the app). The pop-up has a ✕ at the end farthest from the
      bubble, so closing it never starts a dictation by mistake.
-   - Next: *command mode* (select text, tap the bubble, say what to do with it) and
-     per-app defaults (e.g. always offer Email first in Gmail).
-5. **Polish the bubble**: hold-to-talk, settings, and voice activity detection so long
-   dictations transcribe in chunks while you talk (keeping the wait short and removing the
-   3-minute limit).
+   - **Command mode** (done, awaiting on-phone testing): select text and the bubble turns purple
+     (it listens for selection changes). Tap or hold it and say what to do; the instruction is
+     transcribed, Gemma rewrites the selection (`core/EditCommand` prompt), and the result
+     replaces the selection, with Undo and the formatting buttons offered as usual. Can be
+     switched off in the AI card to dictate over a selection instead.
+   - Next: per-app defaults (e.g. always offer Email first in Gmail).
+5. **Polish the bubble** (done, awaiting on-phone testing):
+   - **Hold-to-talk**: hold the bubble (Android's touch-and-hold delay), speak, let go. Taps and
+     drags work as before.
+   - **Long dictations**: the recording is cut at natural pauses as it comes in
+     (`core/SpeechChunker`: after 10 s of speech, a 0.6 s pause, or 0.3 s after 20 s, and never
+     more than 30 s, cutting at the quietest moment). Each piece is transcribed while you keep
+     talking, so the wait at the end is at most about a second however long you talk.
+     Dictations under 10 s are transcribed in one go, exactly as before. "Quiet" is relative to
+     the room's background level and your voice, so it adapts to noise. The limit is now 30
+     minutes (a safety stop). History shows "N s wait" when it was much less than the work.
 
 ## Known caveats
 

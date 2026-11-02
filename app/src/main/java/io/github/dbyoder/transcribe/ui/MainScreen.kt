@@ -181,6 +181,8 @@ fun MainScreen(viewModel: MainViewModel) {
                         ai = state.ai,
                         bubbleStyles = state.bubbleStyles,
                         onBubbleStyle = viewModel::setBubbleStyleShown,
+                        commandMode = state.commandMode,
+                        onCommandMode = viewModel::setCommandMode,
                         onDownload = { openLink(uriHandler, FormatModelStore.RECOMMENDED_MODEL_URL, viewModel) },
                         onOpenPage = { openLink(uriHandler, FormatModelStore.RECOMMENDED_MODEL_PAGE, viewModel) },
                         onImport = { aiImportLauncher.launch(arrayOf("*/*")) },
@@ -312,7 +314,9 @@ private fun BubbleCard(
                 Text("Floating bubble is on", style = MaterialTheme.typography.titleMedium)
                 Text(
                     "Start typing in any app and a mic bubble appears above the keyboard. " +
-                        "Tap it, speak, then tap again. Drag it to move it.",
+                        "Tap it, speak, then tap again, or hold it down while you speak and let go. " +
+                        "Drag it to move it. Long dictations are transcribed while you talk, so " +
+                        "there's little wait at the end.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 if (!setup.micGranted) {
@@ -505,6 +509,8 @@ private fun FormatCard(
     ai: AiModelState,
     bubbleStyles: Set<FormatStyle>,
     onBubbleStyle: (FormatStyle, Boolean) -> Unit,
+    commandMode: Boolean,
+    onCommandMode: (Boolean) -> Unit,
     onDownload: () -> Unit,
     onOpenPage: () -> Unit,
     onImport: () -> Unit,
@@ -565,6 +571,21 @@ private fun FormatCard(
                     if (bubbleStyles.isEmpty()) {
                         Hint("None picked, so no buttons pop up after you dictate. You can still format dictations below.")
                     }
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Command mode", style = MaterialTheme.typography.titleSmall)
+                            Hint(
+                                "Select some text and the bubble turns purple. Tap or hold it and say what " +
+                                    "to do: \"make this friendlier\", \"translate to Spanish\", \"turn this " +
+                                    "into a list\". The result replaces the selection (Undo puts it back).",
+                            )
+                        }
+                        Switch(checked = commandMode, onCheckedChange = onCommandMode)
+                    }
                     Hint("Model: ${ai.name}")
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = onImport) { Text("Replace") }
@@ -623,7 +644,9 @@ private fun statsLine(t: Transcript): String {
     val speed = if (t.processMillis > 0) "  ·  %.0f× real time".format(t.audioSeconds / processSeconds) else ""
     val time = DateUtils.getRelativeTimeSpanString(t.createdAt)
     val via = t.insertedVia?.let { "  ·  $it" }.orEmpty()
-    return "$time  ·  %.1f s → %.2f s%s".format(t.audioSeconds, processSeconds, speed) + via
+    // Long dictations are mostly transcribed while you talk: show how long you actually waited.
+    val wait = t.waitMillis?.takeIf { it < t.processMillis * 0.8 }?.let { "  ·  %.1f s wait".format(it / 1000f) }.orEmpty()
+    return "$time  ·  %.1f s → %.2f s%s".format(t.audioSeconds, processSeconds, speed) + wait + via
 }
 
 private fun openLink(uriHandler: UriHandler, url: String, viewModel: MainViewModel) {

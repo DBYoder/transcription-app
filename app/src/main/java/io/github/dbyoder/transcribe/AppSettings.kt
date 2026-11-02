@@ -14,6 +14,7 @@ object AppSettings {
     private const val KEY_CLEAN_UP = "clean_up"
     private const val KEY_LAST_FORMAT_USE = "last_format_use"
     private const val KEY_HIDDEN_BUBBLE_STYLES = "hidden_bubble_styles"
+    private const val KEY_COMMAND_MODE = "command_mode"
     private const val RECENT_FORMAT_MS = 24 * 60 * 60 * 1000L
 
     /** How far the bubble's bottom sits above the top of the keyboard, by default. */
@@ -61,6 +62,13 @@ object AppSettings {
     private fun hiddenBubbleStyles(context: Context): Set<String> =
         prefs(context).getString(KEY_HIDDEN_BUBBLE_STYLES, null).orEmpty()
             .split(',').filter { it.isNotEmpty() }.toSet()
+
+    /** Select text, tap the bubble and say what to do with it (needs the AI model). */
+    fun commandMode(context: Context): Boolean = prefs(context).getBoolean(KEY_COMMAND_MODE, true)
+
+    fun setCommandMode(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_COMMAND_MODE, enabled).apply()
+    }
 
     fun bubbleOnLeft(context: Context): Boolean = prefs(context).getBoolean(KEY_BUBBLE_LEFT, false)
 

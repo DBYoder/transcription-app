@@ -7,11 +7,15 @@ It uses NVIDIA's open [Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b
 model through [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx).
 
 **Status:** a floating mic bubble appears above your keyboard (Gboard or any other)
-in any app: tap it, speak, tap again, and the text is typed into the text box. Dictation is
+in any app: tap it, speak, tap again (or hold it while you speak), and the text is typed into
+the text box. Long dictations are transcribed while you talk, so there's little wait at the end
+(up to 30 minutes at a time). Dictation is
 tidied up instantly (no AI): "um"s and stutters removed, spoken punctuation ("comma",
 "question mark", "period"...) typed as the mark itself, and a spoken "new paragraph" becomes
 a line break. Optional on-device AI buttons (Polish, Bullets, Email, Shorter, Prompt) rewrite a
-dictation for you, for example into a tidy work email or a well-structured prompt for an AI chat. See [docs/PLAN.md](docs/PLAN.md).
+dictation for you, for example into a tidy work email or a well-structured prompt for an AI chat.
+With the AI model, *command mode* edits text you select: select it, tap the bubble and say what to
+do ("make this friendlier"). See [docs/PLAN.md](docs/PLAN.md).
 
 ## Install on your phone
 
@@ -32,12 +36,15 @@ dictation for you, for example into a tidy work email or a well-structured promp
       extra step for accessibility services in apps installed outside the Play Store.
       Leave **Transcribe shortcut** off: it adds Android's own floating button that stays
       on screen everywhere, which the bubble doesn't need.
-5. Tap into any text box. The bubble appears above the keyboard. Tap it, speak, tap again.
-   Drag the bubble to move it.
+5. Tap into any text box. The bubble appears above the keyboard. Tap it, speak, tap again,
+   or hold it down while you speak and let go. Drag the bubble to move it.
 6. Optional: in the app's **AI formatting** card, download the AI model (Google's Gemma 4
    E2B, about 2.6 GB) and import it. Formatting buttons then appear beside the bubble after
    each dictation (tap ✕ to put them away), and on each dictation in the app. Untick the ones
-   you don't use under **Buttons beside the bubble** in the same card.
+   you don't use under **Buttons beside the bubble** in the same card. With the AI model,
+   select some text and the bubble turns purple: tap or hold it and say what to do with the
+   selection ("translate to Spanish", "turn this into a list"). Switch this off under
+   **Command mode** if you'd rather dictate over a selection.
 
 Later builds install over the top; models and settings stay put.
 
@@ -57,13 +64,16 @@ covers 25 European languages. Use **Replace model** in the app.
 
 ## How it's built
 
-- `core/`: plain Kotlin logic (model unpacking, audio helpers, spacing when inserting text)
-  with unit tests that run on any computer: `./gradlew :core:test`.
+- `core/`: plain Kotlin logic (model unpacking, cutting long recordings at pauses, tidy-up,
+  spacing when inserting text, AI prompts) with unit tests that run on any computer:
+  `./gradlew :core:test`.
 - `app/`: the Android app. `./gradlew :app:assembleRelease` builds the APK. The sherpa-onnx
   library is downloaded from its GitHub release at build time.
   - `bubble/`: the accessibility service, the overlay bubble, and text insertion.
   - `speech/SpeechEngine`: loads the model on first use (shared by the bubble and the app
     screen) and frees its memory after 10 idle minutes.
+  - `speech/LiveTranscription`: cuts the recording at natural pauses (`core/SpeechChunker`)
+    and transcribes each piece while you keep talking.
 - `.github/workflows/build.yml`: every push builds the APK on GitHub, fails the build if the
   APK requests any network permission, and (on pushes) updates the **Latest build** release.
 
