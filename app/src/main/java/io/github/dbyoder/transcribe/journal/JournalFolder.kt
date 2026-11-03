@@ -20,7 +20,7 @@ interface JournalFolder {
     fun delete(name: String)
 }
 
-/** Files in the app's own storage: private, and shared only when you share them. */
+/** Files in the app's own storage: private to this app. */
 class PrivateJournalFolder(context: Context) : JournalFolder {
     private val dir = File(context.filesDir, "journal").apply { mkdirs() }
 

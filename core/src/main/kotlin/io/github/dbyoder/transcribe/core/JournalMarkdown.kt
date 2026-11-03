@@ -48,7 +48,7 @@ data class JournalDay(
 
 /**
  * The journal's file format: plain Markdown with a little front matter, so Obsidian, other
- * note apps and AI assistants like Claude can all read it.
+ * note apps and AI assistants can all read it.
  *
  * ```
  * ---
@@ -191,18 +191,6 @@ object JournalMarkdown {
             if (entry.tags.isNotEmpty()) out.append(entry.tags.joinToString(" ") { "#$it" }).append('\n')
             if (entry.body.isNotBlank()) out.append('\n').append(entry.body.trim('\n')).append('\n')
             out.append('\n')
-        }
-        return out.toString().trimEnd('\n') + "\n"
-    }
-
-    /**
-     * Several days as one Markdown document (oldest first), for sharing with an AI assistant:
-     * a heading, then each day with its entries.
-     */
-    fun combined(days: List<JournalDay>, heading: String): String {
-        val out = StringBuilder("# ").append(heading).append("\n\n")
-        for (day in days.sortedBy { it.date }) {
-            out.append(body(day).replaceFirst("# ", "## ").replace("\n## ", "\n### ")).append('\n')
         }
         return out.toString().trimEnd('\n') + "\n"
     }

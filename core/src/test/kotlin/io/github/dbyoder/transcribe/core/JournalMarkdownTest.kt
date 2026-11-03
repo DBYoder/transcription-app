@@ -99,38 +99,6 @@ class JournalMarkdownTest {
     }
 
     @Test
-    fun combinedForSharing() {
-        val earlier = JournalDay(date.minusDays(1), listOf(JournalEntry(LocalTime.of(8, 0), "Ran 5k.")))
-        val out = JournalMarkdown.combined(listOf(day, earlier), "Journal: Nov 2 to Nov 3, 2026")
-        assertEquals(
-            """
-            # Journal: Nov 2 to Nov 3, 2026
-
-            ## Monday, November 2, 2026
-
-            ### 8:00 AM
-
-            Ran 5k.
-
-            ## Tuesday, November 3, 2026
-
-            ### 9:14 AM · Budget talk
-            #work
-
-            Talked with Saoirse about the Q4 budget.
-
-            We agreed to wait.
-
-            ### 6:40 PM
-            #family #work
-
-            Dinner with the kids.
-            """.trimIndent() + "\n",
-            out,
-        )
-    }
-
-    @Test
     fun tags() {
         assertEquals("work-stuff", JournalMarkdown.tag("#Work stuff"))
         assertEquals("q4", JournalMarkdown.tag("Q4!"))

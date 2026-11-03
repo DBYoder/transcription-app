@@ -66,8 +66,6 @@ internal class JournalActions(
     val onAsk: (String) -> Unit,
     val onClear: () -> Unit,
     val onOpen: (LocalDate, JournalEntry) -> Unit,
-    val onShareDay: (JournalDay) -> Unit,
-    val onShareRecent: (Int?) -> Unit,
     val onLabels: (Boolean) -> Unit,
 )
 
@@ -87,7 +85,7 @@ internal fun JournalPage(
             Header(
                 "Journal",
                 "Say what's on your mind. Entries are saved as Markdown files, one per day, that you can " +
-                    "search here or share with Claude.",
+                    "search and ask about here.",
             )
         }
         if (where == null) {
@@ -95,7 +93,6 @@ internal fun JournalPage(
         } else {
             item { NewEntryCard(state, speechReady, actions) }
             item { FindCard(state, aiReady, actions) }
-            item { ShareCard(actions) }
             if (days.isEmpty()) {
                 item {
                     if (loading) {
@@ -117,8 +114,8 @@ private fun JournalSetupCard(actions: JournalActions) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Where should your journal live?", style = MaterialTheme.typography.titleMedium)
             Text(
-                "In a folder you choose, other apps can use the files too: open them in Obsidian, or sync the " +
-                    "folder to your computer or Google Drive so Claude can read your whole journal.",
+                "In a folder you choose, you can get to the files yourself: open them in Obsidian or a file " +
+                    "manager, copy them, or sync the folder to your computer.",
                 style = MaterialTheme.typography.bodyMedium,
             )
             Button(onClick = actions.onChooseFolder, modifier = Modifier.fillMaxWidth()) { Text("Choose a folder") }
@@ -126,7 +123,7 @@ private fun JournalSetupCard(actions: JournalActions) {
             OutlinedButton(onClick = actions.onKeepPrivate, modifier = Modifier.fillMaxWidth()) {
                 Text("Keep it inside this app")
             }
-            Hint("Private to this app. You can still share entries, and move to a folder later.")
+            Hint("Only this app can see the files. You can move them to a folder later.")
         }
     }
 }
@@ -285,28 +282,14 @@ private fun ResultsView(query: String, results: List<JournalHit>, actions: Journ
 }
 
 @Composable
-private fun ShareCard(actions: JournalActions) {
-    ElevatedCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Share with Claude", style = MaterialTheme.typography.titleMedium)
-            Hint("Sends entries as one Markdown file to any app. Pick Claude to have it look across your journal.")
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { actions.onShareRecent(7) }) { Text("Last 7 days") }
-                OutlinedButton(onClick = { actions.onShareRecent(30) }) { Text("Last 30 days") }
-                OutlinedButton(onClick = { actions.onShareRecent(null) }) { Text("Everything") }
-            }
-        }
-    }
-}
-
-@Composable
 private fun DayCard(day: JournalDay, actions: JournalActions) {
     ElevatedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(dayLabel(day.date), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                TextButton(onClick = { actions.onShareDay(day) }) { Text("Share") }
-            }
+            Text(
+                dayLabel(day.date),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
+            )
             if (day.intro.isNotBlank()) {
                 Text(day.intro, style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
             }
@@ -341,7 +324,7 @@ private fun JournalSettingsCard(where: String, aiReady: Boolean, labels: Boolean
                 SettingSwitch(
                     title = "Titles and tags by AI",
                     description = "After each entry is saved, the AI on this phone adds a short title and a few " +
-                        "tags, which make it easier to find (here and for Claude).",
+                        "tags, which make it easier to find.",
                     checked = labels,
                     onChange = actions.onLabels,
                 )
