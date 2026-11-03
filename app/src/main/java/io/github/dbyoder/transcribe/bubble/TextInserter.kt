@@ -177,7 +177,8 @@ object TextInserter {
         val connection = inputConnection(service) ?: return false
         val action = info.imeOptions and EditorInfo.IME_MASK_ACTION
         if (action !in SEND_ACTIONS) return false
-        return connection.performEditorAction(action)
+        connection.performEditorAction(action) // returns nothing: whether it worked is checked afterwards
+        return true
     }
 
     private val SEND_ACTIONS = setOf(EditorInfo.IME_ACTION_SEND, EditorInfo.IME_ACTION_GO, EditorInfo.IME_ACTION_SEARCH)
