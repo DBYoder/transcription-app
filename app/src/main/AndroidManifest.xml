@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Optional: the names in your contacts, so dictation listens out for them. Read on the phone only. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
 
     <!--
         Privacy guarantee: this app can never use the network. These lines strip the

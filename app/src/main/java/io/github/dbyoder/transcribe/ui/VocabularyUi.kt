@@ -35,21 +35,51 @@ import io.github.dbyoder.transcribe.history.Transcript
 import kotlin.math.max
 import kotlin.math.min
 
-/** Your words: names and terms spelled your way. */
+/** Names from your contacts, plus your own words: names and terms spelled your way. */
 @Composable
 internal fun WordsCard(
     words: List<DictionaryEntry>,
+    useContacts: Boolean,
+    contactsAllowed: Boolean,
+    contactNameCount: Int?,
+    onUseContacts: (Boolean) -> Unit,
     boost: Boolean,
     onBoost: (Boolean) -> Unit,
     onAdd: () -> Unit,
     onRemove: (DictionaryEntry) -> Unit,
 ) {
+    val contactsOn = useContacts && contactsAllowed
     ElevatedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Your words", style = MaterialTheme.typography.titleMedium)
+            Text("Names and words", style = MaterialTheme.typography.titleMedium)
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Names from your contacts", style = MaterialTheme.typography.titleSmall)
+                    Hint(
+                        when {
+                            useContacts && !contactsAllowed ->
+                                "Contacts access is off, so this isn't working. Switch it on again to allow it."
+                            contactsOn && contactNameCount != null ->
+                                "Listening out for $contactNameCount names from your contacts, so they're caught " +
+                                    "and spelled right. Only names are read, on the phone, and nothing leaves it."
+                            contactsOn -> "Reading names from your contacts…"
+                            else ->
+                                "Listen out for the names in your contacts, so they're caught and spelled right. " +
+                                    "Only names are read, on the phone, and nothing leaves it."
+                        },
+                    )
+                }
+                Switch(checked = contactsOn, onCheckedChange = onUseContacts)
+            }
+            Text("Your own words", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
             Hint(
-                "Names and terms spelled your way. Add what the app writes instead (\"whisper flow\" for " +
-                    "\"Wispr Flow\") and it's fixed every time. Or tap \"Fix a word\" on any dictation below.",
+                "For anything else: add a word spelled your way, and what the app writes instead (\"whisper " +
+                    "flow\" for \"Wispr Flow\"), and it's fixed every time. Or tap \"Fix a word\" on any " +
+                    "dictation below.",
             )
             for (entry in words) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -63,16 +93,16 @@ internal fun WordsCard(
                 }
             }
             OutlinedButton(onClick = onAdd) { Text("Add a word") }
-            if (words.isNotEmpty()) {
+            if (words.isNotEmpty() || contactsOn) {
                 Row(
-                    Modifier.fillMaxWidth(),
+                    Modifier.fillMaxWidth().padding(top = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Listen out for these words", style = MaterialTheme.typography.titleSmall)
+                        Text("Listen out for these names and words", style = MaterialTheme.typography.titleSmall)
                         Hint(
-                            "Helps the speech model catch them in the first place, not just fix them " +
+                            "Helps the speech model catch them in the first place, not just fix their spelling " +
                                 "afterwards. Dictation takes a little longer while this is on.",
                         )
                     }

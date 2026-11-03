@@ -105,6 +105,27 @@ fun MainScreen(viewModel: MainViewModel) {
     val aiImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.importAiModel(uri)
     }
+    val contactsPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            viewModel.setUseContacts(true)
+        } else {
+            scope.launch {
+                val result = snackbar.showSnackbar(
+                    message = "Transcribe needs contacts access to listen out for names.",
+                    actionLabel = "Settings",
+                    duration = SnackbarDuration.Long,
+                )
+                if (result == SnackbarResult.ActionPerformed) openAppInfo(context)
+            }
+        }
+    }
+    val onUseContacts = { on: Boolean ->
+        if (on && context.checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+            contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+        } else {
+            viewModel.setUseContacts(on)
+        }
+    }
     val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         viewModel.refreshSetup()
         if (granted) {
@@ -184,6 +205,10 @@ fun MainScreen(viewModel: MainViewModel) {
                 item {
                     WordsCard(
                         words = words,
+                        useContacts = state.useContacts,
+                        contactsAllowed = state.contactsAllowed,
+                        contactNameCount = state.contactNameCount,
+                        onUseContacts = onUseContacts,
                         boost = state.boostWords,
                         onBoost = viewModel::setBoostWords,
                         onAdd = { addingWord = true },

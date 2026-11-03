@@ -44,8 +44,11 @@ object PersonalDictionary {
     /**
      * The words to listen out for, in the form sherpa-onnx takes them: phrases separated by "/".
      * Empty if there are none.
+     *
+     * @param canSpell leaves out words the speech model can't write (see [BpeVocab.characters]),
+     *   which it would otherwise only half listen for.
      */
-    fun hotwords(entries: List<DictionaryEntry>): String =
+    fun hotwords(entries: List<DictionaryEntry>, canSpell: (String) -> Boolean = { true }): String =
         entries.asSequence()
             .map { entry ->
                 entry.word.replace("/", " ")
@@ -54,7 +57,7 @@ object PersonalDictionary {
                     .filter { it.isNotEmpty() }
                     .joinToString(" ")
             }
-            .filter { it.isNotEmpty() }
+            .filter { it.isNotEmpty() && canSpell(it) }
             .distinct()
             .joinToString("/")
 
@@ -130,4 +133,16 @@ object BpeVocab {
         }
         return out.toString()
     }
+
+    /**
+     * Every character the speech model can write (its single-character pieces, as SentencePiece
+     * keeps one for each). A word with any other character can't be spelled by it.
+     */
+    fun characters(tokens: String): Set<Char> =
+        tokens.lineSequence()
+            .mapNotNull { line -> line.trim().substringBeforeLast(' ', "").takeIf { it.isNotEmpty() } }
+            .map { it.removePrefix("\u2581") }
+            .filter { it.length == 1 }
+            .map { it[0] }
+            .toSet()
 }

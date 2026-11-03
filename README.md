@@ -13,8 +13,8 @@ the text box. Long dictations are transcribed while you talk, so there's little 
 tidied up instantly (no AI): "um"s and stutters removed, spoken punctuation ("comma",
 "question mark", "period"...) typed as the mark itself, and a spoken "new paragraph" becomes
 a line break. Voice commands: "scratch that" deletes what you just said, "thumbs up emoji"
-types 👍, and ending with "send" sends the message. Your own words and names are spelled your
-way (add them, or tap "Fix a word" on a dictation), and snippets insert saved text ("insert
+types 👍, and ending with "send" sends the message. Names from your contacts (optional) and your own
+words are listened for and spelled your way (or tap "Fix a word" on a dictation), and snippets insert saved text ("insert
 my email"). Optional on-device AI buttons (Polish, Bullets, Email, Shorter, Prompt) rewrite a
 dictation for you, for example into a tidy work email or a well-structured prompt for an AI chat.
 With the AI model, *command mode* edits text you select: select it, tap the bubble and say what to
@@ -49,7 +49,9 @@ do ("make this friendlier"). See [docs/PLAN.md](docs/PLAN.md).
    selection ("translate to Spanish", "turn this into a list"). Switch this off under
    **Command mode** if you'd rather dictate over a selection. **Auto-polish** runs Polish on
    every dictation, so self-corrections ("Tuesday, no wait, Wednesday") come out clean.
-7. Optional: add names and terms under **Your words**, and saved text under **Snippets**.
+7. Optional: under **Names and words**, switch on **Names from your contacts** so dictation
+   listens out for the people you know (only names are read, on the phone), and add any other
+   terms. Add saved text under **Snippets**.
 
 Later builds install over the top; models and settings stay put.
 
@@ -58,7 +60,8 @@ Later builds install over the top; models and settings stay put.
 It's the only way Android lets an app notice you're typing in another app and put text
 into that app's text box. Wispr Flow's Android app uses the same approach. Transcribe only
 looks at the focused text box and the keyboard's position, skips password fields, and has no
-internet access. Recent dictations are kept on the phone (in the app) so nothing is lost if
+internet access. If you switch on contact names, it reads only first, middle and last names,
+on the phone. Recent dictations are kept on the phone (in the app) so nothing is lost if
 inserting fails, and you can clear them anytime.
 
 ### Other models
