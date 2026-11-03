@@ -95,8 +95,13 @@ Goal: a Wispr Flow-style dictation tool for a Pixel 10a (Tensor G4, 8 GB RAM) th
      dictation, types the saved text.
    - **Voice commands** (`core/VoiceCommands`, part of the tidy-up): "scratch that" deletes the
      sentence before it (said first, it takes back the previous dictation from the text box);
-     "<name> emoji" types the emoji; ending with "send" after a pause (or "press enter") sends
-     the message via the text box's own action, the app's Send button, or Enter.
+     "<name> emoji" types the emoji; ending with "send" (or "press enter") sends the message.
+     - *Fixed after testing ("send" didn't send):* "send" no longer needs a pause before it,
+       unless the word before makes it part of the sentence ("I'll send", "can you send"). The
+       Send button is now found by walking the screen's contents, because apps built with
+       Jetpack Compose (like Google Messages) don't answer Android's quick text search. It tries
+       the app's Send button first, then the text box's Send/Go/Search action, then Enter
+       (single-line boxes only), and checks the text box emptied after each before moving on.
    - **Auto-polish** (AI card): runs Polish on every bubble dictation of 4 to 300 words before
      typing it, which handles self-corrections like Wispr Flow does. Undo restores the exact
      words; if the AI fails or its reply looks cut short, the dictation is typed as said.

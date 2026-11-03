@@ -5,7 +5,7 @@ package io.github.dbyoder.transcribe.core
  * - "scratch that" (or "strike that") deletes the sentence before it. Said first, it takes back
  *   the previous dictation instead.
  * - "<name> emoji" ("thumbs up emoji") types the emoji.
- * - Ending with "send" (after a pause), "press enter" or "hit enter" sends the message.
+ * - Ending with "send", "send message", "press enter" or "hit enter" sends the message.
  */
 object VoiceCommands {
     data class Scratched(val text: String, val removePrevious: Boolean)
@@ -103,16 +103,43 @@ object VoiceCommands {
     /** "press enter" / "hit enter" at the very end. */
     private val ENTER = Regex("""(?i)([.!?]?)[\s,;:]*(?<![\p{L}\p{N}])(?:press|hit)\s+enter[.!?]*\s*$""")
 
-    /**
-     * "send" (or "send message") at the very end, said as its own sentence or after a pause the
-     * speech model marked with punctuation: "See you soon. Send." but not "I'll send".
-     */
-    private val SEND = Regex("""(?i)(^|[.!?,;:])\s*send(?:\s+(?:the\s+)?message)?[.!?]*\s*$""")
+    /** "send" or "send message" at the very end, and what came just before it. */
+    private val SEND = Regex("""(?i)(?:(^|[.!?,;:])\s*|(?<=[\p{L}\p{N}'’])\s+)send(?:\s+(?:the\s+)?message)?[.!?]*\s*$""")
 
+    /** "send it" at the very end, but only said as its own sentence ("Done. Send it."). */
+    private val SEND_IT = Regex("""(?i)(^|[.!?])\s*send\s+it[.!?]*\s*$""")
+
+    /**
+     * Words that come before "send" when it's part of what you're saying rather than a command:
+     * "I'll send", "can you send", "please send".
+     */
+    private val SEND_AS_A_WORD_AFTER = setOf(
+        "i", "you", "we", "they", "he", "she", "it", "who", "i'll", "you'll", "we'll", "they'll", "he'll",
+        "she'll", "ill", "i'd", "you'd", "we'd", "they'd", "will", "would", "could", "should", "can",
+        "can't", "cannot", "won't", "wouldn't", "couldn't", "shouldn't", "to", "please", "pls", "plz",
+        "just", "and", "or", "then", "also", "not", "don't", "didn't", "doesn't", "did", "do", "does",
+        "let's", "lets", "gonna", "wanna", "gotta", "must", "might", "may", "never", "always", "still",
+        "already", "i'm", "you're", "we're", "they're", "going", "want", "need", "forgot", "remember",
+    )
+
+    /**
+     * Finds a "send" command at the end. Said after a pause (which the speech model marks with
+     * punctuation) it always counts. Run straight on ("sounds good send") it counts unless the
+     * word before makes "send" part of the sentence ("I'll send", "can you send").
+     */
     fun trailingSend(text: String): Sent {
-        val match = ENTER.find(text) ?: SEND.find(text) ?: return Sent(text, false)
+        val match = ENTER.find(text) ?: SEND_IT.find(text) ?: SEND.find(text)?.takeIf { isCommand(text, it) }
+            ?: return Sent(text, false)
         val mark = match.groupValues[1].takeIf { it.isNotEmpty() && it in ".!?" }.orEmpty()
         val kept = text.substring(0, match.range.first).trimEnd(' ', ',', ';', ':') + mark
         return Sent(kept.trim(), true)
+    }
+
+    private fun isCommand(text: String, match: MatchResult): Boolean {
+        if (match.groupValues[1].isNotEmpty()) return true // after punctuation, or the whole dictation
+        val before = text.substring(0, match.range.first).trimEnd()
+        if (before.isEmpty()) return true
+        val previous = before.substringAfterLast(' ').lowercase().replace('’', '\'').trim { !it.isLetterOrDigit() && it != '\'' }
+        return previous !in SEND_AS_A_WORD_AFTER
     }
 }
