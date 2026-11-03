@@ -24,7 +24,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -39,6 +41,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
@@ -56,6 +60,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -170,51 +175,88 @@ fun MainScreen(viewModel: MainViewModel) {
         }
     }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = 16.dp,
-                end = 16.dp,
-                top = padding.calculateTopPadding() + 16.dp,
-                bottom = padding.calculateBottomPadding() + 24.dp,
-            ),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            item { Header() }
-            item {
-                ModelCard(
-                    model = state.model,
-                    threads = state.threads,
-                    idle = state.recorder == RecorderState.Idle,
-                    onDownload = onDownload,
-                    onImport = onImport,
-                    onThreads = viewModel::setThreads,
-                )
-            }
-            if (state.model is ModelState.Ready) {
-                item {
-                    BubbleCard(
-                        setup = state.setup,
-                        onAllowMic = onAllowMic,
-                        onOpenAccessibility = { openBubbleSettings(context) },
-                        onOpenAppInfo = { openAppInfo(context) },
+    var tab by rememberSaveable { mutableStateOf(Tab.DICTATE) }
+    val setup = state.setup
+    val bubbleReady = setup.bubbleEnabled && setup.micGranted && !setup.shortcutButtonOn
+
+    val modelCard = @Composable {
+        ModelCard(
+            model = state.model,
+            threads = state.threads,
+            idle = state.recorder == RecorderState.Idle,
+            onDownload = onDownload,
+            onImport = onImport,
+            onThreads = viewModel::setThreads,
+        )
+    }
+    val bubbleCard = @Composable {
+        BubbleCard(
+            setup = setup,
+            onAllowMic = onAllowMic,
+            onOpenAccessibility = { openBubbleSettings(context) },
+            onOpenAppInfo = { openAppInfo(context) },
+        )
+    }
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
+        bottomBar = {
+            NavigationBar {
+                for (t in Tab.entries) {
+                    NavigationBarItem(
+                        selected = tab == t,
+                        onClick = { tab = t },
+                        icon = { Icon(painterResource(t.icon), contentDescription = null) },
+                        label = { Text(t.label) },
                     )
                 }
-                item { CleanUpCard(enabled = state.cleanUp, onChange = viewModel::setCleanUp) }
+            }
+        },
+    ) { padding ->
+        when (tab) {
+            Tab.DICTATE -> Page(padding) {
+                item { Header("Transcribe", "Speech to text that runs entirely on this phone.") }
+                // Until everything works, the next setup step comes first.
+                when {
+                    state.model !is ModelState.Ready -> item { modelCard() }
+                    !bubbleReady -> item { bubbleCard() }
+                    else -> item { ReadyCard(aiReady = state.ai is AiModelState.Ready) }
+                }
+                item { MicSection(state, onMic) }
+                if (history.isNotEmpty()) {
+                    item {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Recent dictations", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                            TextButton(onClick = viewModel::clearHistory) { Text("Clear") }
+                        }
+                    }
+                }
+                items(history, key = { it.id }) { transcript ->
+                    TranscriptCard(
+                        transcript = transcript,
+                        onCopy = { clipboard.setText(AnnotatedString(transcript.text)) },
+                        canFormat = state.ai is AiModelState.Ready && state.formattingId == null,
+                        formatting = state.formattingId == transcript.id,
+                        onFormat = { style -> viewModel.format(transcript, style) },
+                        onFix = { fixing = transcript },
+                    )
+                }
+            }
+
+            Tab.WORDS -> Page(padding) {
+                item { Header("Words", "Names and phrases for dictation to get right, and text you insert by voice.") }
                 item {
-                    WordsCard(
-                        words = words,
+                    NamesCard(
                         useContacts = state.useContacts,
                         contactsAllowed = state.contactsAllowed,
                         contactNameCount = state.contactNameCount,
                         onUseContacts = onUseContacts,
+                        hasOwnWords = words.isNotEmpty(),
                         boost = state.boostWords,
                         onBoost = viewModel::setBoostWords,
-                        onAdd = { addingWord = true },
-                        onRemove = viewModel::removeWord,
                     )
                 }
+                item { YourWordsCard(words = words, onAdd = { addingWord = true }, onRemove = viewModel::removeWord) }
                 item {
                     SnippetsCard(
                         snippets = snippets,
@@ -222,40 +264,39 @@ fun MainScreen(viewModel: MainViewModel) {
                         onRemove = viewModel::removeSnippet,
                     )
                 }
+            }
+
+            Tab.AI -> Page(padding) {
+                item { Header("AI", "Optional rewriting, with an AI model that also runs on this phone.") }
                 item {
-                    FormatCard(
+                    AiModelCard(
                         ai = state.ai,
-                        bubbleStyles = state.bubbleStyles,
-                        onBubbleStyle = viewModel::setBubbleStyleShown,
-                        commandMode = state.commandMode,
-                        onCommandMode = viewModel::setCommandMode,
-                        autoPolish = state.autoPolish,
-                        onAutoPolish = viewModel::setAutoPolish,
                         onDownload = { openLink(uriHandler, FormatModelStore.RECOMMENDED_MODEL_URL, viewModel) },
                         onOpenPage = { openLink(uriHandler, FormatModelStore.RECOMMENDED_MODEL_PAGE, viewModel) },
                         onImport = { aiImportLauncher.launch(arrayOf("*/*")) },
                         onRemove = viewModel::removeAiModel,
                     )
                 }
-            }
-            item { MicSection(state, onMic) }
-            if (history.isNotEmpty()) {
-                item {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Recent dictations", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                        TextButton(onClick = viewModel::clearHistory) { Text("Clear") }
+                if (state.ai is AiModelState.Ready) {
+                    item { BubbleButtonsCard(bubbleStyles = state.bubbleStyles, onBubbleStyle = viewModel::setBubbleStyleShown) }
+                    item {
+                        AiExtrasCard(
+                            commandMode = state.commandMode,
+                            onCommandMode = viewModel::setCommandMode,
+                            autoPolish = state.autoPolish,
+                            onAutoPolish = viewModel::setAutoPolish,
+                        )
                     }
                 }
             }
-            items(history, key = { it.id }) { transcript ->
-                TranscriptCard(
-                    transcript = transcript,
-                    onCopy = { clipboard.setText(AnnotatedString(transcript.text)) },
-                    canFormat = state.ai is AiModelState.Ready && state.formattingId == null,
-                    formatting = state.formattingId == transcript.id,
-                    onFormat = { style -> viewModel.format(transcript, style) },
-                    onFix = { fixing = transcript },
-                )
+
+            Tab.SETTINGS -> Page(padding) {
+                item { Header("Settings", null) }
+                item { CleanUpCard(enabled = state.cleanUp, onChange = viewModel::setCleanUp) }
+                item { VoiceCommandsCard() }
+                if (state.model is ModelState.Ready) item { bubbleCard() }
+                item { modelCard() }
+                item { AboutCard() }
             }
         }
     }
@@ -290,15 +331,110 @@ fun MainScreen(viewModel: MainViewModel) {
     }
 }
 
+/** The app's pages, picked from the bar at the bottom. */
+private enum class Tab(val label: String, val icon: Int) {
+    DICTATE("Dictate", R.drawable.ic_mic),
+    WORDS("Words", R.drawable.ic_book),
+    AI("AI", R.drawable.ic_command),
+    SETTINGS("Settings", R.drawable.ic_settings),
+}
+
+/** One page: a scrolling column of cards, clear of the status bar and the bottom bar. */
 @Composable
-private fun Header() {
+private fun Page(padding: PaddingValues, content: LazyListScope.() -> Unit) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = 16.dp,
+            end = 16.dp,
+            top = padding.calculateTopPadding() + 16.dp,
+            bottom = padding.calculateBottomPadding() + 24.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        content = content,
+    )
+}
+
+@Composable
+private fun Header(title: String, subtitle: String?) {
     Column {
-        Text("Transcribe", style = MaterialTheme.typography.headlineMedium)
-        Text(
-            "Speech to text that runs entirely on this phone. The app has no internet access.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Text(title, style = MaterialTheme.typography.headlineMedium)
+        if (subtitle != null) {
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** Shown on the Dictate page once everything is set up: how to use the bubble. */
+@Composable
+private fun ReadyCard(aiReady: Boolean) {
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Ready to dictate", style = MaterialTheme.typography.titleMedium)
+            Hint("Tap into a text box in any app and the mic bubble appears above the keyboard.")
+            HowTo("Tap", "Start. Tap again to stop.")
+            HowTo("Hold", "Talk while you hold it, let go to finish.")
+            HowTo("Drag", "Move it.")
+            if (aiReady) HowTo("Select text", "It turns purple: say what to change.")
+            Hint("More things you can say are under Settings.")
+        }
+    }
+}
+
+/** A gesture or phrase, and what it does. */
+@Composable
+private fun HowTo(action: String, effect: String) {
+    Row(verticalAlignment = Alignment.Top) {
+        Text(action, style = MaterialTheme.typography.labelLarge, modifier = Modifier.width(96.dp).padding(top = 2.dp))
+        Text(effect, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+    }
+}
+
+/** Everything you can say while dictating, in one place. */
+@Composable
+private fun VoiceCommandsCard() {
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Things you can say", style = MaterialTheme.typography.titleMedium)
+            Said("\"comma\", \"period\", \"question mark\", \"exclamation point\", \"colon\"", "Types the punctuation mark.")
+            Said("\"open quote\" … \"close quote\", \"open paren\" … \"close paren\"", "Quotes and brackets.")
+            Said("\"new line\", \"new paragraph\"", "A line break.")
+            Said("\"scratch that\"", "Deletes the sentence you just said. Said first, it takes back your last dictation.")
+            Said("\"thumbs up emoji\"", "Any emoji's name, then \"emoji\", types it: 👍")
+            Said("…\"send\" at the end, after a pause", "Sends the message. \"Press enter\" works too.")
+            Said("\"insert my email\"", "Types one of your snippets (set them up under Words).")
+            Hint("These are part of the tidy-up, so they work while it's on.")
+        }
+    }
+}
+
+@Composable
+private fun Said(phrase: String, effect: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(phrase, style = MaterialTheme.typography.labelLarge)
+        Hint(effect)
+    }
+}
+
+@Composable
+private fun AboutCard() {
+    val context = LocalContext.current
+    val version = remember {
+        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()
+    }
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("About", style = MaterialTheme.typography.titleMedium)
+            Hint(if (version != null) "Transcribe $version" else "Transcribe")
+            Hint(
+                "Everything runs on this phone. The app has no internet access, so your voice, your text and " +
+                    "your contacts can't leave it.",
+            )
+        }
     }
 }
 
@@ -457,16 +593,8 @@ private fun CleanUpCard(enabled: Boolean, onChange: (Boolean) -> Unit) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Tidy up dictation", style = MaterialTheme.typography.titleMedium)
                 Hint(
-                    "Removes um, uh and stutters, and drops fillers like \", you know,\". Say punctuation " +
-                        "out loud (\"comma\", \"period\", \"question mark\", \"exclamation point\", " +
-                        "\"colon\", \"open quote\"...) to type it, and \"new line\" or \"new paragraph\" " +
-                        "for a line break. Instant, no AI.",
-                )
-                Hint(
-                    "Voice commands: \"scratch that\" deletes the sentence you just said (said first, it " +
-                        "takes back your last dictation). Say an emoji's name and \"emoji\" (\"thumbs up " +
-                        "emoji\") to type it. End with \"send\" after a pause, or \"press enter\", to send " +
-                        "the message.",
+                    "Removes um, uh and stutters, drops fillers like \", you know,\", and turns the things " +
+                        "you say below into punctuation and commands. Instant, no AI.",
                 )
             }
             Switch(checked = enabled, onCheckedChange = onChange)
@@ -594,14 +722,8 @@ private fun TranscriptCard(
 }
 
 @Composable
-private fun FormatCard(
+private fun AiModelCard(
     ai: AiModelState,
-    bubbleStyles: Set<FormatStyle>,
-    onBubbleStyle: (FormatStyle, Boolean) -> Unit,
-    commandMode: Boolean,
-    onCommandMode: (Boolean) -> Unit,
-    autoPolish: Boolean,
-    onAutoPolish: (Boolean) -> Unit,
     onDownload: () -> Unit,
     onOpenPage: () -> Unit,
     onImport: () -> Unit,
@@ -611,12 +733,12 @@ private fun FormatCard(
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             when (ai) {
                 AiModelState.Missing -> {
-                    Text("AI formatting (optional)", style = MaterialTheme.typography.titleMedium)
+                    Text("Set up the AI model (optional)", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "Adds Polish, Bullets, Email, Shorter and Prompt buttons, next to the bubble right after you " +
-                            "dictate and on each dictation below. It uses Google's Gemma 4 model, which runs on " +
-                            "this phone like everything else. It's a one-time 2.6 GB download, and each tap " +
-                            "takes a few seconds.",
+                        "Adds Polish, Bullets, Email, Shorter and Prompt buttons next to the bubble and on each " +
+                            "dictation, plus command mode and Auto-polish. It uses Google's Gemma 4 model, which " +
+                            "runs on this phone like everything else. It's a one-time 2.6 GB download, and each " +
+                            "rewrite takes a few seconds.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Button(onClick = onDownload, modifier = Modifier.fillMaxWidth()) { Text("1. Download the AI model") }
@@ -638,60 +760,13 @@ private fun FormatCard(
                 }
 
                 is AiModelState.Ready -> {
-                    Text("AI formatting is on", style = MaterialTheme.typography.titleMedium)
+                    Text("AI model ready", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "After you dictate with the bubble, tap a button next to it to rewrite what you just " +
-                            "said (Undo puts it back, ✕ puts the buttons away). Every button is on each dictation " +
-                            "below. The first tap takes longer while the model loads.",
+                        "After you dictate with the bubble, tap a button next to it to rewrite what you just said " +
+                            "(Undo puts it back, ✕ puts the buttons away). Every button is also on each dictation " +
+                            "on the Dictate page. The first rewrite takes longer while the model loads.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    Text(
-                        "Buttons beside the bubble",
-                        style = MaterialTheme.typography.titleSmall,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                    Column {
-                        for (style in FormatStyle.entries) {
-                            StyleOption(
-                                style = style,
-                                checked = style in bubbleStyles,
-                                onChange = { shown -> onBubbleStyle(style, shown) },
-                            )
-                        }
-                    }
-                    if (bubbleStyles.isEmpty()) {
-                        Hint("None picked, so no buttons pop up after you dictate. You can still format dictations below.")
-                    }
-                    Row(
-                        Modifier.fillMaxWidth().padding(top = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("Command mode", style = MaterialTheme.typography.titleSmall)
-                            Hint(
-                                "Select some text and the bubble turns purple. Tap or hold it and say what " +
-                                    "to do: \"make this friendlier\", \"translate to Spanish\", \"turn this " +
-                                    "into a list\". The result replaces the selection (Undo puts it back).",
-                            )
-                        }
-                        Switch(checked = commandMode, onCheckedChange = onCommandMode)
-                    }
-                    Row(
-                        Modifier.fillMaxWidth().padding(top = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("Auto-polish", style = MaterialTheme.typography.titleSmall)
-                            Hint(
-                                "Runs Polish on everything you dictate with the bubble before it's typed, so " +
-                                    "\"Tuesday, no wait, Wednesday\" comes out as \"Wednesday\". Adds a few " +
-                                    "seconds each time. Undo brings back your exact words.",
-                            )
-                        }
-                        Switch(checked = autoPolish, onCheckedChange = onAutoPolish)
-                    }
                     Hint("Model: ${ai.name}")
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = onImport) { Text("Replace") }
@@ -700,6 +775,72 @@ private fun FormatCard(
                 }
             }
         }
+    }
+}
+
+/** Which formatting buttons pop up beside the bubble. */
+@Composable
+private fun BubbleButtonsCard(bubbleStyles: Set<FormatStyle>, onBubbleStyle: (FormatStyle, Boolean) -> Unit) {
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Buttons beside the bubble", style = MaterialTheme.typography.titleMedium)
+            Hint("Pick the ones you use. They pop up for a few seconds after each dictation.")
+            for (style in FormatStyle.entries) {
+                StyleOption(
+                    style = style,
+                    checked = style in bubbleStyles,
+                    onChange = { shown -> onBubbleStyle(style, shown) },
+                )
+            }
+            if (bubbleStyles.isEmpty()) {
+                Hint("None picked, so no buttons pop up after you dictate. You can still format dictations on the Dictate page.")
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiExtrasCard(
+    commandMode: Boolean,
+    onCommandMode: (Boolean) -> Unit,
+    autoPolish: Boolean,
+    onAutoPolish: (Boolean) -> Unit,
+) {
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            SettingSwitch(
+                title = "Command mode",
+                description = "Select some text and the bubble turns purple. Tap or hold it and say what to do: " +
+                    "\"make this friendlier\", \"translate to Spanish\", \"turn this into a list\". The result " +
+                    "replaces the selection (Undo puts it back).",
+                checked = commandMode,
+                onChange = onCommandMode,
+            )
+            SettingSwitch(
+                title = "Auto-polish",
+                description = "Runs Polish on everything you dictate with the bubble before it's typed, so " +
+                    "\"Tuesday, no wait, Wednesday\" comes out as \"Wednesday\". Adds a few seconds each time. " +
+                    "Undo brings back your exact words.",
+                checked = autoPolish,
+                onChange = onAutoPolish,
+            )
+        }
+    }
+}
+
+/** A titled on/off setting with an explanation. */
+@Composable
+internal fun SettingSwitch(title: String, description: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Hint(description)
+        }
+        Switch(checked = checked, onCheckedChange = onChange)
     }
 }
 
