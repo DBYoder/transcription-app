@@ -3,7 +3,6 @@ package io.github.dbyoder.transcribe
 import android.app.Application
 import android.content.Intent
 import android.net.Uri
-import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.dbyoder.transcribe.ai.Formatter
@@ -34,14 +33,9 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 /** An answer from "Ask your journal", with the entries it was based on. */
 data class JournalAnswer(val question: String, val text: String, val sources: List<JournalAsk.Source>)
-
-/** A file ready to hand to the share sheet. */
-data class ShareRequest(val uri: Uri, val title: String)
 
 data class JournalUiState(
     val recorder: RecorderState = RecorderState.Idle,
@@ -53,7 +47,6 @@ data class JournalUiState(
     val answer: JournalAnswer? = null,
     /** Have the AI add a title and tags to each new entry. */
     val labels: Boolean = true,
-    val share: ShareRequest? = null,
     val message: String? = null,
 )
 
@@ -320,42 +313,6 @@ class JournalViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(results = null, answer = null) }
     }
 
-    // --- Sharing ----------------------------------------------------------------------------
-
-    fun shareDay(day: JournalDay) =
-        share(listOf(day), "Journal: ${JournalMarkdown.titleOf(day.date)}", "journal-${day.date}.md")
-
-    /** The last [days] days of entries, or everything if null. */
-    fun shareRecent(days: Int?) {
-        val all = this.days.value
-        if (all.isEmpty()) return show("There's nothing in your journal to share yet.")
-        val today = LocalDate.now()
-        val picked = if (days == null) all else all.filter { it.date > today.minusDays(days.toLong()) }
-        if (picked.isEmpty()) return show("No entries in the last $days days.")
-        val from = picked.minOf { it.date }
-        val to = picked.maxOf { it.date }
-        val heading = "Journal: ${SHORT_DATE.format(from)} to ${SHORT_DATE.format(to)}"
-        share(picked, heading, "journal-$from-to-$to.md")
-    }
-
-    private fun share(days: List<JournalDay>, heading: String, fileName: String) {
-        viewModelScope.launch {
-            try {
-                val file = Journal.exportFile(days, heading, fileName)
-                val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
-                _state.update { it.copy(share = ShareRequest(uri, heading)) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                show("Couldn't share: ${e.message}")
-            }
-        }
-    }
-
-    fun shareHandled() {
-        _state.update { it.copy(share = null) }
-    }
-
     // --- Misc -------------------------------------------------------------------------------
 
     private fun show(message: String) {
@@ -371,7 +328,4 @@ class JournalViewModel(app: Application) : AndroidViewModel(app) {
         live?.cancel()
     }
 
-    companion object {
-        private val SHORT_DATE = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.US)
-    }
 }

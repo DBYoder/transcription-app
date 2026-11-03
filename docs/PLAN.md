@@ -129,8 +129,8 @@ Goal: a Wispr Flow-style dictation tool for a Pixel 10a (Tensor G4, 8 GB RAM) th
      week", "in October", "yesterday") and by keywords, up to what Gemma reads at once (about
      7,000 characters), and has it answer from them, citing dates.
    - AI titles and tags after each entry is saved (`core/EntryLabels`), so it's never held up.
-   - Share a day, the last 7 or 30 days, or everything as one Markdown file through the share
-     sheet (to the Claude app, say). The app still has no internet access.
+   - No sharing built in (removed after testing: not wanted). The Markdown files in the
+     chosen folder can be opened, copied or shared with any app. The app has no internet access.
    - Next (step 3): search by meaning with an on-device embedding model.
 
 ## Known caveats

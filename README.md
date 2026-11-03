@@ -60,8 +60,8 @@ do ("make this friendlier"). See [docs/PLAN.md](docs/PLAN.md).
 
 8. Optional: on the **Journal** page, choose a folder (or keep it inside the app), then tap
    the mic and talk. Each day is one Markdown file (`2026-11-03.md`) that Obsidian, sync apps
-   and AI assistants can read. Search it, ask it questions (with the AI model), or share a day,
-   a week, a month or everything with Claude for deeper questions.
+   and AI assistants can read. Search it, or ask it questions (with the AI model). The files are
+   yours to open, copy or share however you like.
 
 Later builds install over the top; models and settings stay put.
 

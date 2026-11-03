@@ -1,7 +1,6 @@
 package io.github.dbyoder.transcribe.ui
 
 import android.Manifest
-import android.content.ClipData
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -174,19 +173,6 @@ fun MainScreen(viewModel: MainViewModel, journal: JournalViewModel) {
         journal.messageShown()
         snackbar.showSnackbar(message, withDismissAction = true, duration = SnackbarDuration.Long)
     }
-    // Hand an exported journal file to the share sheet (Claude, email, Drive...).
-    LaunchedEffect(journalState.share) {
-        val share = journalState.share ?: return@LaunchedEffect
-        val send = Intent(Intent.ACTION_SEND)
-            .setType("text/plain")
-            .putExtra(Intent.EXTRA_STREAM, share.uri)
-            .putExtra(Intent.EXTRA_SUBJECT, share.title)
-            .putExtra(Intent.EXTRA_TITLE, share.title)
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        send.clipData = ClipData.newRawUri(share.title, share.uri)
-        runCatching { context.startActivity(Intent.createChooser(send, "Share your journal")) }
-        journal.shareHandled()
-    }
 
     val onDownload = {
         try {
@@ -225,8 +211,6 @@ fun MainScreen(viewModel: MainViewModel, journal: JournalViewModel) {
         onAsk = journal::ask,
         onClear = journal::clearResults,
         onOpen = { date, entry -> editingEntry = date to entry },
-        onShareDay = journal::shareDay,
-        onShareRecent = journal::shareRecent,
         onLabels = journal::setLabels,
     )
 

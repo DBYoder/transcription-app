@@ -13,7 +13,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.io.File
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -147,15 +146,5 @@ object Journal {
             _days.value = (_days.value.filter { it.date != date } + listOfNotNull(updated.takeUnless { empty }))
                 .sortedByDescending { it.date }
         }
-    }
-
-    /**
-     * Writes [days] as one Markdown file to share (with Claude, say) and returns it. It lives in
-     * the app's cache, which Android clears when it needs space.
-     */
-    suspend fun exportFile(days: List<JournalDay>, heading: String, fileName: String): File = withContext(Dispatchers.IO) {
-        val dir = File(app.cacheDir, "shared").apply { mkdirs() }
-        dir.listFiles()?.forEach { it.delete() } // only ever keep the latest
-        File(dir, fileName).apply { writeText(JournalMarkdown.combined(days, heading)) }
     }
 }
