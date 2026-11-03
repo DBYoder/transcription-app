@@ -405,7 +405,7 @@ private fun VoiceCommandsCard() {
             Said("\"new line\", \"new paragraph\"", "A line break.")
             Said("\"scratch that\"", "Deletes the sentence you just said. Said first, it takes back your last dictation.")
             Said("\"thumbs up emoji\"", "Any emoji's name, then \"emoji\", types it: 👍")
-            Said("…\"send\" at the end, after a pause", "Sends the message. \"Press enter\" works too.")
+            Said("…\"send\" at the end", "Taps the app's Send button. \"Press enter\" works too.")
             Said("\"insert my email\"", "Types one of your snippets (set them up under Words).")
             Hint("These are part of the tidy-up, so they work while it's on.")
         }

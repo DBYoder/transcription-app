@@ -55,6 +55,16 @@ class VoiceCommandsTest {
         assertEquals(VoiceCommands.Sent("On my way!", true), VoiceCommands.trailingSend("On my way! Send message."))
         assertEquals(VoiceCommands.Sent("Done", true), VoiceCommands.trailingSend("Done press enter"))
         assertEquals(VoiceCommands.Sent("Done.", true), VoiceCommands.trailingSend("Done. Hit enter."))
+        assertEquals(VoiceCommands.Sent("Done.", true), VoiceCommands.trailingSend("Done. Send it."))
+        assertEquals(VoiceCommands.Sent("", true), VoiceCommands.trailingSend("Send it."))
+    }
+
+    @Test
+    fun sendRunStraightOn() {
+        // No pause, so no punctuation from the speech model.
+        assertEquals(VoiceCommands.Sent("Sounds good", true), VoiceCommands.trailingSend("Sounds good send."))
+        assertEquals(VoiceCommands.Sent("See you at 5", true), VoiceCommands.trailingSend("See you at 5 send"))
+        assertEquals(VoiceCommands.Sent("On my way", true), VoiceCommands.trailingSend("On my way send message."))
     }
 
     @Test
@@ -63,5 +73,10 @@ class VoiceCommandsTest {
         assertFalse(VoiceCommands.trailingSend("Can you send?").send)
         assertFalse(VoiceCommands.trailingSend("Please review it, send it.").send)
         assertFalse(VoiceCommands.trailingSend("Send it to Bob tomorrow.").send)
+        assertFalse(VoiceCommands.trailingSend("Can you please send.").send)
+        assertFalse(VoiceCommands.trailingSend("I'm going to send").send)
+        assertFalse(VoiceCommands.trailingSend("Let me know when you'll send.").send)
+        assertFalse(VoiceCommands.trailingSend("I’ll send").send)
+        assertFalse(VoiceCommands.trailingSend("Godsend").send)
     }
 }

@@ -347,9 +347,11 @@ class DictationService : AccessibilityService() {
     }
 
     private suspend fun sendMessage() {
-        delay(SEND_DELAY_MS) // let the app catch up with the new text (and enable its Send button)
         lastDictation = null // the text box is about to empty
-        if (!TextInserter.pressSend(this)) toast("Couldn't find a Send button here.")
+        delay(SEND_DELAY_MS) // let the app catch up with the new text (and enable its Send button)
+        if (TextInserter.pressSend(this)) return
+        delay(SEND_RETRY_DELAY_MS) // some apps are slow to enable Send: one more go
+        if (!TextInserter.pressSend(this)) toast("Couldn't send: no Send button found here. Your text is typed in.")
     }
 
     /** Types the dictation into the text box. Returns true if the formatting buttons should show. */
@@ -531,7 +533,8 @@ class DictationService : AccessibilityService() {
     }
 
     companion object {
-        private const val SEND_DELAY_MS = 250L
+        private const val SEND_DELAY_MS = 300L
+        private const val SEND_RETRY_DELAY_MS = 600L
         private const val AUTO_POLISH_MIN_WORDS = 4
         private const val AUTO_POLISH_MAX_WORDS = 300
 

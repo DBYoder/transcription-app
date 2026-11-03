@@ -3,15 +3,18 @@ package io.github.dbyoder.transcribe.bubble
 import android.accessibilityservice.AccessibilityService
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.graphics.Rect
 import android.os.Build
 import android.os.Bundle
 import android.text.InputType
 import android.view.KeyEvent
 import android.view.inputmethod.EditorInfo
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import androidx.annotation.RequiresApi
 import io.github.dbyoder.transcribe.core.TextJoin
 import kotlinx.coroutines.delay
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
@@ -32,6 +35,8 @@ object TextInserter {
 
     private const val CHECK_INTERVAL_MS = 100L
     private const val CHECK_ATTEMPTS = 6
+    private const val SEND_CHECK_ATTEMPTS = 12
+    private const val MAX_NODES_SEARCHED = 2000
 
     /**
      * Tries, in order, checking each time that the text box really changed:
@@ -133,56 +138,131 @@ object TextInserter {
     }
 
     /**
-     * Sends the message: the text box's own Send / Go / Search / Done action if it has one,
-     * otherwise the app's Send button, otherwise the Enter key (single-line boxes only, so it
-     * never just adds a line break). Returns false if nothing could be pressed.
+     * Sends the message, trying in turn: the app's Send button, the text box's own Send / Go /
+     * Search action, and the Enter key (single-line boxes only, so it never just adds a line
+     * break). After each, it checks the text box emptied, and moves on to the next if not.
+     * Returns false if nothing worked.
      */
-    fun pressSend(service: AccessibilityService): Boolean {
-        var multiLine = false
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val info = service.inputMethod?.currentInputEditorInfo
-            val connection = inputConnection(service)
-            if (info != null && connection != null) {
-                multiLine = (info.inputType and InputType.TYPE_TEXT_FLAG_MULTI_LINE) != 0
-                val action = info.imeOptions and EditorInfo.IME_MASK_ACTION
-                val enterDoesAction = (info.imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION) == 0
-                if (enterDoesAction && action in SEND_ACTIONS) {
-                    connection.performEditorAction(action)
-                    return true
-                }
-            }
-        }
-        if (clickSendButton(service)) return true
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !multiLine) {
-            val connection = inputConnection(service) ?: return false
-            connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
-            connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
-            return true
+    suspend fun pressSend(service: AccessibilityService): Boolean {
+        val box = focusedTextBox(service)
+        val before = box?.let(::currentText)
+        val attempts: List<() -> Boolean> = listOf(
+            { clickSendButton(service, box) },
+            { editorAction(service) },
+            { enterKey(service) },
+        )
+        for (attempt in attempts) {
+            if (!runCatching { attempt() }.getOrDefault(false)) continue
+            // Without the box's text we can't tell whether it worked, so trust it.
+            if (box == null || before.isNullOrEmpty() || waitForSent(box, before)) return true
         }
         return false
     }
 
-    private val SEND_ACTIONS = setOf(
-        EditorInfo.IME_ACTION_SEND,
-        EditorInfo.IME_ACTION_GO,
-        EditorInfo.IME_ACTION_SEARCH,
-        EditorInfo.IME_ACTION_DONE,
-    )
-
-    /** Taps the app's Send button ("Send", "Send message", "Send SMS"...), if there's one on screen. */
-    private fun clickSendButton(service: AccessibilityService): Boolean {
-        val root = runCatching { service.rootInActiveWindow }.getOrNull() ?: return false
-        val nodes = runCatching { root.findAccessibilityNodeInfosByText("send") }.getOrNull().orEmpty()
-        for (node in nodes) {
-            val label = (node.contentDescription ?: node.text)?.toString()?.trim()?.lowercase().orEmpty()
-            val isSend = label == "send" ||
-                (label.startsWith("send ") && listOf("message", "sms", "mms", "chat", "button").any { it in label })
-            if (!isSend || !node.isVisibleToUser || !node.isEnabled) continue
-            var target: AccessibilityNodeInfo? = node
-            while (target != null && !target.isClickable) target = target.parent
-            if (target != null && target.isEnabled && target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+    /** True once the box has emptied (or gone, as when an email's compose screen closes). */
+    private suspend fun waitForSent(box: AccessibilityNodeInfo, before: String): Boolean {
+        repeat(SEND_CHECK_ATTEMPTS) {
+            delay(CHECK_INTERVAL_MS)
+            if (!box.refresh()) return true
+            val now = currentText(box) ?: return true
+            if (now.isBlank() || now.length < before.length / 2) return true
         }
         return false
+    }
+
+    /** The text box's own action, if it's one that sends or submits (not just "Done"). */
+    private fun editorAction(service: AccessibilityService): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return false
+        val info = service.inputMethod?.currentInputEditorInfo ?: return false
+        val connection = inputConnection(service) ?: return false
+        val action = info.imeOptions and EditorInfo.IME_MASK_ACTION
+        if (action !in SEND_ACTIONS) return false
+        return connection.performEditorAction(action)
+    }
+
+    private val SEND_ACTIONS = setOf(EditorInfo.IME_ACTION_SEND, EditorInfo.IME_ACTION_GO, EditorInfo.IME_ACTION_SEARCH)
+
+    /** Enter, but only in a single-line box, where it submits rather than starting a new line. */
+    private fun enterKey(service: AccessibilityService): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return false
+        val info = service.inputMethod?.currentInputEditorInfo ?: return false
+        if ((info.inputType and InputType.TYPE_TEXT_FLAG_MULTI_LINE) != 0) return false
+        val connection = inputConnection(service) ?: return false
+        connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+        connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
+        return true
+    }
+
+    /**
+     * Taps the app's Send button ("Send", "Send message", "Send SMS"...): in the text box's own
+     * window first, then any other app window. The nearest one to the text box wins.
+     */
+    private fun clickSendButton(service: AccessibilityService, box: AccessibilityNodeInfo?): Boolean {
+        val roots = ArrayList<AccessibilityNodeInfo>()
+        runCatching { box?.window?.root }.getOrNull()?.let { roots += it }
+        runCatching { service.rootInActiveWindow }.getOrNull()?.let { roots += it }
+        runCatching { service.windows }.getOrNull().orEmpty()
+            .filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
+            .forEach { w -> runCatching { w.root }.getOrNull()?.let { roots += it } }
+        val boxBounds = box?.let { Rect().also(it::getBoundsInScreen) }
+        val tried = HashSet<Int>()
+        for (root in roots) {
+            if (!tried.add(root.windowId)) continue
+            val buttons = sendButtons(root)
+            val ordered = buttons.sortedWith(
+                compareBy<AccessibilityNodeInfo>({ if (label(it) == "send") 0 else 1 }, { distance(it, boxBounds) }),
+            )
+            for (button in ordered) {
+                var target: AccessibilityNodeInfo? = button
+                while (target != null && !target.isClickable) target = target.parent
+                if (target != null && target.isEnabled && target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+            }
+        }
+        return false
+    }
+
+    /**
+     * Send buttons in a window. Android's text search is quick but many apps (anything built with
+     * Jetpack Compose, like Google Messages) don't answer it, so if it finds nothing, walk the
+     * window's contents.
+     */
+    private fun sendButtons(root: AccessibilityNodeInfo): List<AccessibilityNodeInfo> {
+        val found = runCatching { root.findAccessibilityNodeInfosByText("send") }.getOrNull().orEmpty().filter(::isSendButton)
+        if (found.isNotEmpty()) return found
+        val out = ArrayList<AccessibilityNodeInfo>()
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        queue.add(root)
+        var visited = 0
+        while (queue.isNotEmpty() && visited < MAX_NODES_SEARCHED) {
+            val node = queue.removeFirst()
+            visited++
+            if (isSendButton(node)) out += node
+            for (i in 0 until node.childCount) runCatching { node.getChild(i) }.getOrNull()?.let(queue::add)
+        }
+        return out
+    }
+
+    private fun label(node: AccessibilityNodeInfo): String =
+        (node.contentDescription ?: node.text ?: node.tooltipText)?.toString()?.trim()?.lowercase().orEmpty()
+
+    private fun isSendButton(node: AccessibilityNodeInfo): Boolean {
+        if (!node.isVisibleToUser || !node.isEnabled || node.isEditable) return false
+        val label = label(node)
+        if (label == "send") return true
+        if (!label.startsWith("send ") || label.length > 40) return false
+        return NOT_SEND_BUTTONS.none { it in label }
+    }
+
+    /** "Send ..." buttons that don't send the message you just typed. */
+    private val NOT_SEND_BUTTONS = listOf(
+        "money", "payment", "pay", "voice", "audio", "photo", "picture", "image", "video", "gif", "sticker",
+        "file", "attachment", "location", "feedback", "invite", "contact", "later", "schedule",
+    )
+
+    private fun distance(node: AccessibilityNodeInfo, box: Rect?): Int {
+        if (box == null) return 0
+        val r = Rect().also(node::getBoundsInScreen)
+        return abs(r.centerY() - box.centerY()) + abs(r.centerX() - box.right) / 4
     }
 
     /** text[start until end], if that's a sensible, non-blank range. */
