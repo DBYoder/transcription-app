@@ -8,10 +8,12 @@ import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig
 import io.github.dbyoder.transcribe.AppSettings
 import io.github.dbyoder.transcribe.core.BpeVocab
+import io.github.dbyoder.transcribe.core.DictionaryEntry
 import io.github.dbyoder.transcribe.core.PersonalDictionary
 import io.github.dbyoder.transcribe.core.SAMPLE_RATE
 import io.github.dbyoder.transcribe.core.TransducerModel
 import io.github.dbyoder.transcribe.model.ModelStore
+import io.github.dbyoder.transcribe.vocab.ContactNames
 import io.github.dbyoder.transcribe.vocab.UserVocabulary
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -32,8 +34,9 @@ import kotlin.system.measureTimeMillis
  * model takes a few seconds to load and several hundred MB of memory, so it loads on first
  * use and unloads after [IDLE_UNLOAD_MS] without use.
  *
- * With words in your dictionary, it decodes with a small beam search that listens out for them
- * ("hotwords"), which helps it catch names it would otherwise mishear. That's a little slower
+ * With words in your dictionary (or names from your contacts), it decodes with a small beam
+ * search that listens out for them ("hotwords"), which helps it catch names it would otherwise
+ * mishear. That's a little slower
  * than the plain decoding used otherwise, and can be switched off in the app.
  */
 object SpeechEngine {
@@ -51,6 +54,10 @@ object SpeechEngine {
 
     /** The dictionary words being listened for, in sherpa-onnx's format; empty when not boosting. */
     private var hotwords = ""
+
+    /** The characters the installed model can write, and which tokens file they came from. */
+    private var spellable: Set<Char>? = null
+    private var spellableKey: String? = null
 
     fun init(context: Context) {
         appContext = context.applicationContext
@@ -88,7 +95,7 @@ object SpeechEngine {
     private suspend fun loadLocked(): LoadInfo? {
         val model = ModelStore(appContext).installed() ?: return null
         val threads = AppSettings.threads(appContext)
-        val wanted = if (AppSettings.boostWords(appContext)) PersonalDictionary.hotwords(UserVocabulary.words.value) else ""
+        val wanted = if (AppSettings.boostWords(appContext)) hotwordsFor(model) else ""
         val vocab = if (wanted.isNotEmpty()) bpeVocabFor(model) else null
         val boost = vocab != null
         // lastModified changes when a model is re-imported, which forces a reload. Changing the
@@ -103,6 +110,19 @@ object SpeechEngine {
         hotwords = if (boost) wanted else ""
         scheduleIdleUnload()
         return loadInfo
+    }
+
+    /** Your words and contact names the model can spell, in sherpa-onnx's format. */
+    private fun hotwordsFor(model: TransducerModel): String {
+        val entries = UserVocabulary.words.value + ContactNames.load(appContext).map { DictionaryEntry(it) }
+        if (entries.isEmpty()) return ""
+        val key = "${model.tokens.absolutePath}|${model.tokens.lastModified()}"
+        if (key != spellableKey) {
+            spellable = runCatching { BpeVocab.characters(model.tokens.readText()) }.getOrNull()?.takeIf { it.isNotEmpty() }
+            spellableKey = key
+        }
+        val chars = spellable
+        return PersonalDictionary.hotwords(entries) { word -> chars == null || word.all { it == ' ' || it in chars } }
     }
 
     private fun config(model: TransducerModel, threads: Int, bpeVocab: File?) = OfflineRecognizerConfig(

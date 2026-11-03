@@ -24,6 +24,7 @@ import io.github.dbyoder.transcribe.model.ModelStore
 import io.github.dbyoder.transcribe.speech.LiveTranscription
 import io.github.dbyoder.transcribe.speech.SpeechEngine
 import io.github.dbyoder.transcribe.speech.TextPipeline
+import io.github.dbyoder.transcribe.vocab.ContactNames
 import io.github.dbyoder.transcribe.vocab.UserVocabulary
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -84,6 +85,11 @@ data class UiState(
     val autoPolish: Boolean = false,
     /** Have the speech model listen out for dictionary words. */
     val boostWords: Boolean = true,
+    /** Listen out for the names in your contacts (the setting; access may still be missing). */
+    val useContacts: Boolean = false,
+    val contactsAllowed: Boolean = false,
+    /** How many contact names are being listened for, once counted. */
+    val contactNameCount: Int? = null,
     val setup: SetupState = SetupState(),
     val ai: AiModelState = AiModelState.Missing,
     /** The history item an AI formatting button is working on, if any. */
@@ -108,6 +114,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             commandMode = AppSettings.commandMode(app),
             autoPolish = AppSettings.autoPolish(app),
             boostWords = AppSettings.boostWords(app),
+            useContacts = AppSettings.useContacts(app),
         ),
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
@@ -135,7 +142,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             bubbleEnabled = DictationService.isEnabled(app),
             shortcutButtonOn = DictationService.isShortcutButtonOn(app),
         )
-        _state.update { it.copy(setup = setup) }
+        val contactsAllowed = ContactNames.allowed(app)
+        if (contactsAllowed != _state.value.contactsAllowed) ContactNames.invalidate()
+        _state.update { it.copy(setup = setup, contactsAllowed = contactsAllowed) }
+        countContactNames()
     }
 
     // --- Model ----------------------------------------------------------------------------
@@ -352,6 +362,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         AppSettings.setBoostWords(getApplication<Application>(), enabled)
         _state.update { it.copy(boostWords = enabled) }
         reloadSpeechInBackground()
+    }
+
+    /** Turns contact names on or off. The screen asks for contacts access first. */
+    fun setUseContacts(enabled: Boolean) {
+        val app = getApplication<Application>()
+        AppSettings.setUseContacts(app, enabled)
+        ContactNames.invalidate()
+        _state.update { it.copy(useContacts = enabled, contactsAllowed = ContactNames.allowed(app), contactNameCount = null) }
+        countContactNames()
+        reloadSpeechInBackground()
+    }
+
+    /** Reads your contacts in the background to show how many names were found. */
+    private fun countContactNames() {
+        val app = getApplication<Application>()
+        if (!ContactNames.inUse(app)) {
+            _state.update { it.copy(contactNameCount = null) }
+            return
+        }
+        viewModelScope.launch {
+            val count = withContext(Dispatchers.IO) { runCatching { ContactNames.load(app).size }.getOrNull() }
+            _state.update { it.copy(contactNameCount = count) }
+        }
     }
 
     /** @param heardAs what the app writes instead, comma-separated. */

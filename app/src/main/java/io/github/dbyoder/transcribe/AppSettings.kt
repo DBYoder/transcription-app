@@ -17,6 +17,7 @@ object AppSettings {
     private const val KEY_COMMAND_MODE = "command_mode"
     private const val KEY_AUTO_POLISH = "auto_polish"
     private const val KEY_BOOST_WORDS = "boost_words"
+    private const val KEY_USE_CONTACTS = "use_contacts"
     private const val RECENT_FORMAT_MS = 24 * 60 * 60 * 1000L
 
     /** How far the bubble's bottom sits above the top of the keyboard, by default. */
@@ -84,6 +85,13 @@ object AppSettings {
 
     fun setBoostWords(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_BOOST_WORDS, enabled).apply()
+    }
+
+    /** Listen out for the names in your contacts (also needs the contacts permission). */
+    fun useContacts(context: Context): Boolean = prefs(context).getBoolean(KEY_USE_CONTACTS, false)
+
+    fun setUseContacts(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_USE_CONTACTS, enabled).apply()
     }
 
     fun bubbleOnLeft(context: Context): Boolean = prefs(context).getBoolean(KEY_BUBBLE_LEFT, false)

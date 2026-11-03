@@ -84,6 +84,13 @@ Goal: a Wispr Flow-style dictation tool for a Pixel 10a (Tensor G4, 8 GB RAM) th
      them (sherpa-onnx hotwords, via a small beam search, slightly slower; can be switched off).
      That needs the model's word-piece list (bpe.vocab), which newer model downloads include and
      older ones get rebuilt from tokens.txt (`core/BpeVocab`).
+   - **Names from your contacts** (added after testing: adding names one by one was too much
+     work): with the contacts permission, first/middle/last names (`StructuredName`, starred
+     contacts first, up to 2,000) are listened for alongside your own words.
+     `core/ContactNameFilter` leaves out titles, family labels, business words and names that are
+     also everyday words ("Will", "Grace"), which would bend ordinary speech towards names; names
+     the model can't spell (characters missing from its word pieces) are skipped too. Contacts are
+     re-read when they change (or every 30 minutes) and only kept in memory.
    - **Snippets** (`core/Snippets`): "insert my email" anywhere, or just "my email" as the whole
      dictation, types the saved text.
    - **Voice commands** (`core/VoiceCommands`, part of the tidy-up): "scratch that" deletes the
