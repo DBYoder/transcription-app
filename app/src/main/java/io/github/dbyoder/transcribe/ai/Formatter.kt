@@ -62,6 +62,9 @@ object Formatter {
     suspend fun edit(text: String, instruction: String): String =
         generate(EditCommand.SYSTEM_INSTRUCTION, EditCommand.prompt(instruction, text), bullet = "• ")
 
+    /** Any other request (the journal's questions, titles and tags), in Markdown. */
+    suspend fun ask(system: String, message: String): String = generate(system, message, bullet = "- ")
+
     private suspend fun generate(system: String, message: String, bullet: String): String = withContext(Dispatchers.Default) {
         mutex.withLock {
             loadLocked() ?: throw IllegalStateException("The AI model isn't set up yet. Open Transcribe to add it.")

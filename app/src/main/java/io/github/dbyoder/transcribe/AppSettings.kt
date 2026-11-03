@@ -18,6 +18,8 @@ object AppSettings {
     private const val KEY_AUTO_POLISH = "auto_polish"
     private const val KEY_BOOST_WORDS = "boost_words"
     private const val KEY_USE_CONTACTS = "use_contacts"
+    private const val KEY_JOURNAL_FOLDER = "journal_folder"
+    private const val KEY_JOURNAL_LABELS = "journal_labels"
     private const val RECENT_FORMAT_MS = 24 * 60 * 60 * 1000L
 
     /** How far the bubble's bottom sits above the top of the keyboard, by default. */
@@ -92,6 +94,20 @@ object AppSettings {
 
     fun setUseContacts(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_USE_CONTACTS, enabled).apply()
+    }
+
+    /** Where the journal lives: a folder's URI, "private" (inside the app), or null if not chosen yet. */
+    fun journalFolder(context: Context): String? = prefs(context).getString(KEY_JOURNAL_FOLDER, null)
+
+    fun setJournalFolder(context: Context, value: String) {
+        prefs(context).edit().putString(KEY_JOURNAL_FOLDER, value).apply()
+    }
+
+    /** Have the AI add a title and tags to each new journal entry. */
+    fun journalLabels(context: Context): Boolean = prefs(context).getBoolean(KEY_JOURNAL_LABELS, true)
+
+    fun setJournalLabels(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_JOURNAL_LABELS, enabled).apply()
     }
 
     fun bubbleOnLeft(context: Context): Boolean = prefs(context).getBoolean(KEY_BUBBLE_LEFT, false)

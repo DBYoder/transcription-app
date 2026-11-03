@@ -3,6 +3,7 @@ package io.github.dbyoder.transcribe
 import android.app.Application
 import io.github.dbyoder.transcribe.ai.Formatter
 import io.github.dbyoder.transcribe.history.TranscriptHistory
+import io.github.dbyoder.transcribe.journal.Journal
 import io.github.dbyoder.transcribe.speech.SpeechEngine
 import io.github.dbyoder.transcribe.vocab.UserVocabulary
 
@@ -13,5 +14,6 @@ class TranscribeApp : Application() {
         Formatter.init(this)
         TranscriptHistory.init(this)
         UserVocabulary.init(this)
+        Journal.init(this)
     }
 }

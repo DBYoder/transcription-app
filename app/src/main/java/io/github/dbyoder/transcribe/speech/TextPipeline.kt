@@ -14,7 +14,7 @@ object TextPipeline {
      * @param commands false for command-mode instructions: "send", "scratch that" and snippets
      *   are left as words for the AI to read.
      */
-    fun process(context: Context, raw: String, commands: Boolean = true): ProcessedDictation =
+    fun process(context: Context, raw: String, commands: Boolean = true, allowSend: Boolean = true): ProcessedDictation =
         DictationPipeline.process(
             raw,
             cleanUp = AppSettings.cleanUp(context),
@@ -22,5 +22,6 @@ object TextPipeline {
             words = UserVocabulary.words.value + ContactNames.cached(context).map { DictionaryEntry(it) },
             snippets = UserVocabulary.snippets.value,
             commands = commands,
+            allowSend = allowSend,
         )
 }

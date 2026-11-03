@@ -113,6 +113,26 @@ Goal: a Wispr Flow-style dictation tool for a Pixel 10a (Tensor G4, 8 GB RAM) th
    buttons beside the bubble, command mode and Auto-polish. **Settings** has the tidy-up
    switch, a list of everything you can say, the bubble, the speech model and an About card.
 
+8. **Journal** ("second brain"; steps 1 and 2 done, awaiting on-phone testing):
+   - Entries dictated on the Journal page (long ones are fine, with the usual tidy-up and
+     Auto-polish) or typed, or saved from any dictation with "Save to journal".
+   - One Markdown file per day (`core/JournalMarkdown`): front matter (date, tags), a title,
+     then `## 9:14 AM · Title` sections with an optional `#tags` line. Reading is forgiving and
+     keeps anything other apps add (front matter properties, notes before the first entry,
+     hand-written sections), and each change re-reads the day's file first.
+   - Kept in a folder you pick with Android's folder picker (Storage Access Framework, so
+     Obsidian or a sync app can use the files, with no storage permission), or inside the app.
+     Switching copies the days over.
+   - Keyword search (`core/JournalSearch`: stop words dropped, crude stemming, rarer words and
+     title/tag matches ranked higher).
+   - "Ask your journal" (`core/JournalAsk`): picks entries by any dates in the question ("last
+     week", "in October", "yesterday") and by keywords, up to what Gemma reads at once (about
+     7,000 characters), and has it answer from them, citing dates.
+   - AI titles and tags after each entry is saved (`core/EntryLabels`), so it's never held up.
+   - Share a day, the last 7 or 30 days, or everything as one Markdown file through the share
+     sheet (to the Claude app, say). The app still has no internet access.
+   - Next (step 3): search by meaning with an on-device embedding model.
+
 ## Known caveats
 
 - Android hides the accessibility switch for apps installed outside the Play Store until you
