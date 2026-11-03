@@ -26,8 +26,9 @@ do ("make this friendlier"). See [docs/PLAN.md](docs/PLAN.md).
    **https://github.com/DBYoder/transcription-app/releases/download/latest-build/transcribe.apk**
    (always the newest build) and open the downloaded file.
 2. If Android asks, allow your browser to install apps.
-3. Open **Transcribe**. The app has four pages, picked from the bar at the bottom:
-   **Dictate** (setup, a mic to try it, and your recent dictations), **Words** (names and
+3. Open **Transcribe**. The app has five pages, picked from the bar at the bottom:
+   **Dictate** (setup, a mic to try it, and your recent dictations), **Journal** (dictated
+   entries saved as Markdown, with search and "ask your journal"), **Words** (names and
    snippets), **AI** (the optional AI model and its options) and **Settings** (tidy-up, the
    list of things you can say, the bubble and the speech model). On **Dictate**, follow the
    two setup steps:
@@ -56,6 +57,11 @@ do ("make this friendlier"). See [docs/PLAN.md](docs/PLAN.md).
 7. Optional: on the **Words** page, switch on **Names from your contacts** so dictation
    listens out for the people you know (only names are read, on the phone), and add any other
    terms. Add saved text under **Snippets**.
+
+8. Optional: on the **Journal** page, choose a folder (or keep it inside the app), then tap
+   the mic and talk. Each day is one Markdown file (`2026-11-03.md`) that Obsidian, sync apps
+   and AI assistants can read. Search it, ask it questions (with the AI model), or share a day,
+   a week, a month or everything with Claude for deeper questions.
 
 Later builds install over the top; models and settings stay put.
 

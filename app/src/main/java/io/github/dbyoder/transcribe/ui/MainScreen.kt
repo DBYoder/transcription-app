@@ -1,6 +1,7 @@
 package io.github.dbyoder.transcribe.ui
 
 import android.Manifest
+import android.content.ClipData
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -75,6 +76,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.dbyoder.transcribe.AiModelState
+import io.github.dbyoder.transcribe.JournalViewModel
 import io.github.dbyoder.transcribe.MainViewModel
 import io.github.dbyoder.transcribe.ModelState
 import io.github.dbyoder.transcribe.R
@@ -84,13 +86,22 @@ import io.github.dbyoder.transcribe.UiState
 import io.github.dbyoder.transcribe.ai.FormatModelStore
 import io.github.dbyoder.transcribe.bubble.DictationService
 import io.github.dbyoder.transcribe.core.FormatStyle
+import io.github.dbyoder.transcribe.core.JournalEntry
 import io.github.dbyoder.transcribe.history.Transcript
 import io.github.dbyoder.transcribe.model.ModelStore
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 @Composable
-fun MainScreen(viewModel: MainViewModel) {
+fun MainScreen(viewModel: MainViewModel, journal: JournalViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val journalState by journal.state.collectAsStateWithLifecycle()
+    val journalDays by journal.days.collectAsStateWithLifecycle()
+    val journalLoading by journal.loading.collectAsStateWithLifecycle()
+    val journalWhere by journal.where.collectAsStateWithLifecycle()
+    var typingEntry by remember { mutableStateOf(false) }
+    var editingEntry by remember { mutableStateOf<Pair<LocalDate, JournalEntry>?>(null) }
+    var journalAfterGrant by remember { mutableStateOf(false) }
     val history by viewModel.history.collectAsStateWithLifecycle()
     val words by viewModel.words.collectAsStateWithLifecycle()
     val snippets by viewModel.snippets.collectAsStateWithLifecycle()
@@ -109,6 +120,9 @@ fun MainScreen(viewModel: MainViewModel) {
     }
     val aiImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.importAiModel(uri)
+    }
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) journal.useFolder(uri)
     }
     val contactsPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
@@ -135,6 +149,7 @@ fun MainScreen(viewModel: MainViewModel) {
         viewModel.refreshSetup()
         if (granted) {
             if (recordAfterGrant) viewModel.toggleRecording()
+            if (journalAfterGrant) journal.toggleRecording()
         } else {
             scope.launch {
                 val result = snackbar.showSnackbar(
@@ -146,12 +161,31 @@ fun MainScreen(viewModel: MainViewModel) {
             }
         }
         recordAfterGrant = false
+        journalAfterGrant = false
     }
 
     LaunchedEffect(state.message) {
         val message = state.message ?: return@LaunchedEffect
         snackbar.showSnackbar(message, withDismissAction = true, duration = SnackbarDuration.Long)
         viewModel.messageShown()
+    }
+    LaunchedEffect(journalState.message) {
+        val message = journalState.message ?: return@LaunchedEffect
+        journal.messageShown()
+        snackbar.showSnackbar(message, withDismissAction = true, duration = SnackbarDuration.Long)
+    }
+    // Hand an exported journal file to the share sheet (Claude, email, Drive...).
+    LaunchedEffect(journalState.share) {
+        val share = journalState.share ?: return@LaunchedEffect
+        val send = Intent(Intent.ACTION_SEND)
+            .setType("text/plain")
+            .putExtra(Intent.EXTRA_STREAM, share.uri)
+            .putExtra(Intent.EXTRA_SUBJECT, share.title)
+            .putExtra(Intent.EXTRA_TITLE, share.title)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        send.clipData = ClipData.newRawUri(share.title, share.uri)
+        runCatching { context.startActivity(Intent.createChooser(send, "Share your journal")) }
+        journal.shareHandled()
     }
 
     val onDownload = {
@@ -174,6 +208,27 @@ fun MainScreen(viewModel: MainViewModel) {
             micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
+    val onJournalMic = {
+        if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            journal.toggleRecording()
+        } else {
+            journalAfterGrant = true
+            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+    val journalActions = JournalActions(
+        onChooseFolder = { runCatching { folderPicker.launch(null) } },
+        onKeepPrivate = journal::usePrivate,
+        onRecord = onJournalMic,
+        onType = { typingEntry = true },
+        onSearch = journal::search,
+        onAsk = journal::ask,
+        onClear = journal::clearResults,
+        onOpen = { date, entry -> editingEntry = date to entry },
+        onShareDay = journal::shareDay,
+        onShareRecent = journal::shareRecent,
+        onLabels = journal::setLabels,
+    )
 
     var tab by rememberSaveable { mutableStateOf(Tab.DICTATE) }
     val setup = state.setup
@@ -239,9 +294,21 @@ fun MainScreen(viewModel: MainViewModel) {
                         formatting = state.formattingId == transcript.id,
                         onFormat = { style -> viewModel.format(transcript, style) },
                         onFix = { fixing = transcript },
+                        onSaveToJournal = { journal.addFromHistory(transcript) },
                     )
                 }
             }
+
+            Tab.JOURNAL -> JournalPage(
+                padding = padding,
+                where = journalWhere,
+                loading = journalLoading,
+                days = journalDays,
+                state = journalState,
+                speechReady = state.model is ModelState.Ready,
+                aiReady = state.ai is AiModelState.Ready,
+                actions = journalActions,
+            )
 
             Tab.WORDS -> Page(padding) {
                 item { Header("Words", "Names and phrases for dictation to get right, and text you insert by voice.") }
@@ -319,6 +386,33 @@ fun MainScreen(viewModel: MainViewModel) {
             },
         )
     }
+    if (typingEntry) {
+        EntryDialog(
+            heading = "New entry",
+            entry = null,
+            onDismiss = { typingEntry = false },
+            onSave = { title, body, tags ->
+                journal.addTyped(title, body, tags)
+                typingEntry = false
+            },
+            onDelete = null,
+        )
+    }
+    editingEntry?.let { (date, entry) ->
+        EntryDialog(
+            heading = dayLabel(date) + (entry.time?.let { "  ·  " + io.github.dbyoder.transcribe.core.JournalMarkdown.timeLabel(it) }.orEmpty()),
+            entry = entry,
+            onDismiss = { editingEntry = null },
+            onSave = { title, body, tags ->
+                journal.updateEntry(date, entry, title, body, tags)
+                editingEntry = null
+            },
+            onDelete = {
+                journal.deleteEntry(date, entry)
+                editingEntry = null
+            },
+        )
+    }
     fixing?.let { transcript ->
         FixWordDialog(
             transcript = transcript,
@@ -334,14 +428,15 @@ fun MainScreen(viewModel: MainViewModel) {
 /** The app's pages, picked from the bar at the bottom. */
 private enum class Tab(val label: String, val icon: Int) {
     DICTATE("Dictate", R.drawable.ic_mic),
-    WORDS("Words", R.drawable.ic_book),
+    JOURNAL("Journal", R.drawable.ic_book),
+    WORDS("Words", R.drawable.ic_text_fields),
     AI("AI", R.drawable.ic_command),
     SETTINGS("Settings", R.drawable.ic_settings),
 }
 
 /** One page: a scrolling column of cards, clear of the status bar and the bottom bar. */
 @Composable
-private fun Page(padding: PaddingValues, content: LazyListScope.() -> Unit) {
+internal fun Page(padding: PaddingValues, content: LazyListScope.() -> Unit) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -356,7 +451,7 @@ private fun Page(padding: PaddingValues, content: LazyListScope.() -> Unit) {
 }
 
 @Composable
-private fun Header(title: String, subtitle: String?) {
+internal fun Header(title: String, subtitle: String?) {
     Column {
         Text(title, style = MaterialTheme.typography.headlineMedium)
         if (subtitle != null) {
@@ -673,6 +768,7 @@ private fun TranscriptCard(
     formatting: Boolean,
     onFormat: (FormatStyle) -> Unit,
     onFix: () -> Unit,
+    onSaveToJournal: () -> Unit,
 ) {
     OutlinedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(start = 16.dp, top = 8.dp, end = 4.dp, bottom = 12.dp)) {
@@ -693,14 +789,15 @@ private fun TranscriptCard(
                     modifier = Modifier.padding(end = 12.dp, bottom = 4.dp),
                 )
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    statsLine(transcript),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
+            Text(
+                statsLine(transcript),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(end = 12.dp),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 TextButton(onClick = onFix) { Text("Fix a word") }
+                TextButton(onClick = onSaveToJournal) { Text("Save to journal") }
             }
             if (formatting) {
                 Column(Modifier.padding(top = 8.dp, end = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {

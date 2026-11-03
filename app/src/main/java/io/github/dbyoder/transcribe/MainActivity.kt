@@ -10,13 +10,14 @@ import io.github.dbyoder.transcribe.ui.TranscribeTheme
 
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
+    private val journalViewModel: JournalViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {
             TranscribeTheme {
-                MainScreen(viewModel)
+                MainScreen(viewModel, journalViewModel)
             }
         }
     }
@@ -25,12 +26,16 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // The user may have just switched the bubble on or granted a permission in Settings.
         viewModel.refreshSetup()
+        journalViewModel.refresh() // the journal's files may have been edited in another app
     }
 
     override fun onStop() {
         super.onStop()
         // Android silences the mic for apps that go off screen, so finish any recording
         // started with this screen's button. (The bubble records separately.)
-        if (!isChangingConfigurations) viewModel.onAppHidden()
+        if (!isChangingConfigurations) {
+            viewModel.onAppHidden()
+            journalViewModel.onAppHidden()
+        }
     }
 }

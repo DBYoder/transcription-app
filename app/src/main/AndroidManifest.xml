@@ -38,6 +38,17 @@
             </intent-filter>
         </activity>
 
+        <!-- Hands journal files to the share sheet (to send them to Claude, say). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/shared_files" />
+        </provider>
+
         <!-- The floating dictation bubble. Only the system can bind to it. -->
         <service
             android:name=".bubble.DictationService"

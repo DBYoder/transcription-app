@@ -18,6 +18,7 @@ object DictationPipeline {
      * @param cleanUp the instant tidy-up (fillers, spoken punctuation and the spoken commands).
      * @param commands whether "scratch that", emoji and "send" count. Off for command-mode
      *   instructions, which are read by the AI rather than typed.
+     * @param allowSend whether a final "send" counts (not in the journal, where there's nothing to send).
      */
     fun process(
         raw: String,
@@ -25,6 +26,7 @@ object DictationPipeline {
         words: List<DictionaryEntry> = emptyList(),
         snippets: List<Snippet> = emptyList(),
         commands: Boolean = true,
+        allowSend: Boolean = true,
     ): ProcessedDictation {
         var text = if (cleanUp) TextCleaner.clean(raw) else raw.trim()
         var removePrevious = false
@@ -34,9 +36,11 @@ object DictationPipeline {
             text = scratched.text
             removePrevious = scratched.removePrevious
             // Before emoji: "thumbs up emoji. Send." needs its full stop to count as a pause.
-            val sent = VoiceCommands.trailingSend(text)
-            text = sent.text
-            send = sent.send
+            if (allowSend) {
+                val sent = VoiceCommands.trailingSend(text)
+                text = sent.text
+                send = sent.send
+            }
             text = VoiceCommands.emoji(text)
         }
         // Your own words and snippets apply even with the tidy-up off: you set them up yourself.
