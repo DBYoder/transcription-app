@@ -26,12 +26,16 @@ do ("make this friendlier"). See [docs/PLAN.md](docs/PLAN.md).
    **https://github.com/DBYoder/transcription-app/releases/download/latest-build/transcribe.apk**
    (always the newest build) and open the downloaded file.
 2. If Android asks, allow your browser to install apps.
-3. Open **Transcribe** and follow the two setup steps on screen:
+3. Open **Transcribe**. The app has four pages, picked from the bar at the bottom:
+   **Dictate** (setup, a mic to try it, and your recent dictations), **Words** (names and
+   snippets), **AI** (the optional AI model and its options) and **Settings** (tidy-up, the
+   list of things you can say, the bubble and the speech model). On **Dictate**, follow the
+   two setup steps:
    1. **Download the model.** This opens the model file in your browser
       (`sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.tar.bz2`, several hundred MB).
    2. **Import the downloaded file.** Pick it from Downloads. Unpacking takes a minute or
       two, and you can delete the download afterwards.
-4. Turn on the floating bubble from the app's **Turn on the bubble** card:
+4. Then turn on the floating bubble, still on **Dictate**:
    1. Allow microphone access.
    2. Switch on **Use Transcribe** in Android's accessibility settings (it may be under
       *Downloaded apps*). If the switch is greyed out or says *Restricted setting*, open
@@ -41,15 +45,15 @@ do ("make this friendlier"). See [docs/PLAN.md](docs/PLAN.md).
       on screen everywhere, which the bubble doesn't need.
 5. Tap into any text box. The bubble appears above the keyboard. Tap it, speak, tap again,
    or hold it down while you speak and let go. Drag the bubble to move it.
-6. Optional: in the app's **AI formatting** card, download the AI model (Google's Gemma 4
-   E2B, about 2.6 GB) and import it. Formatting buttons then appear beside the bubble after
-   each dictation (tap ✕ to put them away), and on each dictation in the app. Untick the ones
-   you don't use under **Buttons beside the bubble** in the same card. With the AI model,
+6. Optional: on the **AI** page, download the AI model (Google's Gemma 4 E2B, about 2.6 GB)
+   and import it. Formatting buttons then appear beside the bubble after each dictation (tap
+   ✕ to put them away), and on each dictation in the app. Untick the ones you don't use under
+   **Buttons beside the bubble** on the same page. With the AI model,
    select some text and the bubble turns purple: tap or hold it and say what to do with the
    selection ("translate to Spanish", "turn this into a list"). Switch this off under
    **Command mode** if you'd rather dictate over a selection. **Auto-polish** runs Polish on
    every dictation, so self-corrections ("Tuesday, no wait, Wednesday") come out clean.
-7. Optional: under **Names and words**, switch on **Names from your contacts** so dictation
+7. Optional: on the **Words** page, switch on **Names from your contacts** so dictation
    listens out for the people you know (only names are read, on the phone), and add any other
    terms. Add saved text under **Snippets**.
 

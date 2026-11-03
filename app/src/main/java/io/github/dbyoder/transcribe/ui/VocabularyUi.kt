@@ -16,7 +16,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -35,51 +34,65 @@ import io.github.dbyoder.transcribe.history.Transcript
 import kotlin.math.max
 import kotlin.math.min
 
-/** Names from your contacts, plus your own words: names and terms spelled your way. */
+/** Names from your contacts, and whether the speech model listens out for names and words. */
 @Composable
-internal fun WordsCard(
-    words: List<DictionaryEntry>,
+internal fun NamesCard(
     useContacts: Boolean,
     contactsAllowed: Boolean,
     contactNameCount: Int?,
     onUseContacts: (Boolean) -> Unit,
+    hasOwnWords: Boolean,
     boost: Boolean,
     onBoost: (Boolean) -> Unit,
-    onAdd: () -> Unit,
-    onRemove: (DictionaryEntry) -> Unit,
 ) {
     val contactsOn = useContacts && contactsAllowed
     ElevatedCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Names and words", style = MaterialTheme.typography.titleMedium)
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Names from your contacts", style = MaterialTheme.typography.titleSmall)
-                    Hint(
-                        when {
-                            useContacts && !contactsAllowed ->
-                                "Contacts access is off, so this isn't working. Switch it on again to allow it."
-                            contactsOn && contactNameCount != null ->
-                                "Listening out for $contactNameCount names from your contacts, so they're caught " +
-                                    "and spelled right. Only names are read, on the phone, and nothing leaves it."
-                            contactsOn -> "Reading names from your contacts…"
-                            else ->
-                                "Listen out for the names in your contacts, so they're caught and spelled right. " +
-                                    "Only names are read, on the phone, and nothing leaves it."
-                        },
-                    )
-                }
-                Switch(checked = contactsOn, onCheckedChange = onUseContacts)
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text("Names", style = MaterialTheme.typography.titleMedium)
+            SettingSwitch(
+                title = "Names from your contacts",
+                description = when {
+                    useContacts && !contactsAllowed ->
+                        "Contacts access is off, so this isn't working. Switch it on again to allow it."
+                    contactsOn && contactNameCount != null ->
+                        "Listening out for $contactNameCount names from your contacts, so they're caught and " +
+                            "spelled right. Only names are read, on the phone, and nothing leaves it."
+                    contactsOn -> "Reading names from your contacts…"
+                    else ->
+                        "Listen out for the names in your contacts, so they're caught and spelled right. Only " +
+                            "names are read, on the phone, and nothing leaves it."
+                },
+                checked = contactsOn,
+                onChange = onUseContacts,
+            )
+            if (contactsOn || hasOwnWords) {
+                SettingSwitch(
+                    title = "Listen out for names and words",
+                    description = "Helps the speech model catch your contacts' names and your own words in the " +
+                        "first place, not just fix their spelling afterwards. Dictation takes a little longer " +
+                        "while this is on.",
+                    checked = boost,
+                    onChange = onBoost,
+                )
             }
-            Text("Your own words", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
+        }
+    }
+}
+
+/** Your own words: names and terms spelled your way. */
+@Composable
+internal fun YourWordsCard(
+    words: List<DictionaryEntry>,
+    onAdd: () -> Unit,
+    onRemove: (DictionaryEntry) -> Unit,
+) {
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Your own words", style = MaterialTheme.typography.titleMedium)
             Hint(
-                "For anything else: add a word spelled your way, and what the app writes instead (\"whisper " +
-                    "flow\" for \"Wispr Flow\"), and it's fixed every time. Or tap \"Fix a word\" on any " +
-                    "dictation below.",
+                "For anything else, like work terms: add a word spelled your way and what the app writes " +
+                    "instead (\"whisper flow\" for \"Wispr Flow\"), and it's fixed every time. Or tap \"Fix a " +
+                    "word\" on a dictation on the Dictate page.",
             )
             for (entry in words) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -93,22 +106,6 @@ internal fun WordsCard(
                 }
             }
             OutlinedButton(onClick = onAdd) { Text("Add a word") }
-            if (words.isNotEmpty() || contactsOn) {
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Listen out for these names and words", style = MaterialTheme.typography.titleSmall)
-                        Hint(
-                            "Helps the speech model catch them in the first place, not just fix their spelling " +
-                                "afterwards. Dictation takes a little longer while this is on.",
-                        )
-                    }
-                    Switch(checked = boost, onCheckedChange = onBoost)
-                }
-            }
         }
     }
 }

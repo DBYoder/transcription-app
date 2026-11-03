@@ -101,6 +101,13 @@ Goal: a Wispr Flow-style dictation tool for a Pixel 10a (Tensor G4, 8 GB RAM) th
      typing it, which handles self-corrections like Wispr Flow does. Undo restores the exact
      words; if the AI fails or its reply looks cut short, the dictation is typed as said.
 
+7. **App layout** (done): the settings had grown into one long scrolling page, so the app now
+   has four pages on a bottom bar. **Dictate** shows the next setup step until everything
+   works (then a short "how to use the bubble" card), a mic to try it, and recent dictations.
+   **Words** has contact names, your own words and snippets. **AI** has the AI model, the
+   buttons beside the bubble, command mode and Auto-polish. **Settings** has the tidy-up
+   switch, a list of everything you can say, the bubble, the speech model and an About card.
+
 ## Known caveats
 
 - Android hides the accessibility switch for apps installed outside the Play Store until you
